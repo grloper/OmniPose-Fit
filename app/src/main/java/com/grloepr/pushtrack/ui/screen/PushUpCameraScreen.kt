@@ -70,45 +70,40 @@ private fun CameraPreviewScreen() {
     val viewModel: PushUpCounterViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsState()
     
-    // Ultra-Performance: Initialize pose and face detection components
+    // Initialize pose detection client
     val poseDetectorClient = remember { 
         PoseDetectorClient().apply { initialize() }
     }
-    val faceDetectorClient = remember { 
-        FaceDetectorClient().apply { initialize() }
-    }
-    val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient, faceDetectorClient) }
+    val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
     
-    // Ultra-Performance: Collect combined detection results and process them through ViewModel
+    // Collect pose frame results
     LaunchedEffect(imageAnalyzer) {
-        // Prioritize combined results for maximum accuracy
-        imageAnalyzer.combinedDetectionResults.collectLatest { combinedResult ->
-            viewModel.processCombinedDetectionResult(combinedResult)
+        imageAnalyzer.poseFrameResults.collectLatest { poseFrame ->
+            viewModel.processPoseFrame(poseFrame)
         }
     }
     
-    // Fallback: Collect legacy pose results for compatibility
+    // Fallback for compatibility
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collectLatest { poseResult ->
             viewModel.processPoseResult(poseResult)
         }
     }
     
-    // Ultra-Performance: Clean up both detectors when screen is disposed
-    DisposableEffect(poseDetectorClient, faceDetectorClient) {
+    // Clean up resources when done
+    DisposableEffect(poseDetectorClient) {
         onDispose {
             poseDetectorClient.close()
-            faceDetectorClient.close()
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Camera preview
+        // Camera preview with optimized settings
         AndroidView(
             factory = { context ->
                 PreviewView(context).apply {
-                    // Set scale type to fill the view
                     scaleType = PreviewView.ScaleType.FILL_CENTER
+                    implementationMode = PreviewView.ImplementationMode.PERFORMANCE // Optimize for performance
                 }
             },
             modifier = Modifier.fillMaxSize(),
@@ -125,7 +120,7 @@ private fun CameraPreviewScreen() {
             }
         )
         
-        // Ultra-Precise pose overlay with perfect coordinate transformation
+        // Optimized pose overlay
         uiState.currentPoseFrame?.let { poseFrame ->
             PoseOverlay(
                 poseFrameResult = poseFrame,
@@ -133,15 +128,7 @@ private fun CameraPreviewScreen() {
             )
         }
         
-        // Ultra-Enhanced face overlay for improved accuracy and debugging
-        uiState.currentCombinedResult?.let { combinedResult ->
-            FaceOverlay(
-                combinedResult = combinedResult,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-        
-        // Rep counter overlay
+        // Simplified rep counter overlay
         RepOverlay(
             repCount = uiState.repCount,
             phase = uiState.phase,

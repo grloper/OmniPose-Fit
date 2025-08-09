@@ -143,20 +143,20 @@ private fun transformFaceCoordinate(
         90 -> {
             val newX = result.imageHeight - y
             val newY = x
-            Quadruple(newX, newY, result.imageHeight.toFloat(), result.imageWidth.toFloat())
+            TransformResult(newX, newY, result.imageHeight.toFloat(), result.imageWidth.toFloat())
         }
         180 -> {
             val newX = result.imageWidth - x
             val newY = result.imageHeight - y
-            Quadruple(newX, newY, result.imageWidth.toFloat(), result.imageHeight.toFloat())
+            TransformResult(newX, newY, result.imageWidth.toFloat(), result.imageHeight.toFloat())
         }
         270 -> {
             val newX = y
             val newY = result.imageWidth - x
-            Quadruple(newX, newY, result.imageHeight.toFloat(), result.imageWidth.toFloat())
+            TransformResult(newX, newY, result.imageHeight.toFloat(), result.imageWidth.toFloat())
         }
         else -> {
-            Quadruple(x, y, result.imageWidth.toFloat(), result.imageHeight.toFloat())
+            TransformResult(x, y, result.imageWidth.toFloat(), result.imageHeight.toFloat())
         }
     }
     
@@ -186,7 +186,4 @@ private fun transformFaceCoordinate(
     return Offset(scaledX, scaledY)
 }
 
-/**
- * Data class to hold four values for coordinate transformation
- */
-private data class Quadruple<T>(val first: T, val second: T, val third: T, val fourth: T)
+// Removed private Quadruple; using shared TransformResult

@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.grloepr.pushtrack.analysis.PoseDetectionResult
 import com.grloepr.pushtrack.analysis.PoseFrameResult
-import com.grloepr.pushtrack.analysis.CombinedDetectionResult
 import com.grloepr.pushtrack.domain.AngleUtils
 import com.grloepr.pushtrack.domain.PushUpCounter
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,10 +15,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-// Use enhanced detection results for maximum accuracy
-
 /**
- * Ultra-Enhanced UI state for the push-up counter screen with face detection support
+ * Simplified UI state for the push-up counter screen
  */
 data class PushUpCounterUiState(
     val repCount: Int = 0,
@@ -27,42 +24,34 @@ data class PushUpCounterUiState(
     val lastAngle: Float? = null,
     val isTracking: Boolean = false,
     val currentPoseFrame: PoseFrameResult? = null,
-    val currentCombinedResult: CombinedDetectionResult? = null, // Enhanced with face detection
     val cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 )
 
 /**
- * Ultra-Performance ViewModel for managing push-up counter state with enhanced detection
+ * Optimized ViewModel for managing push-up counter state
  */
 class PushUpCounterViewModel : ViewModel() {
     
-    private val pushUpCounter = PushUpCounter() // Ultra-performance counter with motion prediction
+    private val pushUpCounter = PushUpCounter()
     
     private val _cameraSelector = MutableStateFlow(CameraSelector.DEFAULT_BACK_CAMERA)
     private val _currentPoseFrame = MutableStateFlow<PoseFrameResult?>(null)
-    private val _currentCombinedResult = MutableStateFlow<CombinedDetectionResult?>(null)
     
     val cameraSelector: StateFlow<CameraSelector> = _cameraSelector.asStateFlow()
     val currentPoseFrame: StateFlow<PoseFrameResult?> = _currentPoseFrame.asStateFlow()
-    val currentCombinedResult: StateFlow<CombinedDetectionResult?> = _currentCombinedResult.asStateFlow()
     
-    // Ultra-Enhanced UI state combining counter, camera, and detection results
+    // Optimized UI state
     val uiState: StateFlow<PushUpCounterUiState> = combine(
         pushUpCounter.state,
         _cameraSelector,
-        _currentPoseFrame,
-        _currentCombinedResult
-    ) { counterState: PushUpCounter.CounterState,
-        selector: CameraSelector,
-        poseFrame: PoseFrameResult?,
-        combinedResult: CombinedDetectionResult? ->
+        _currentPoseFrame
+    ) { counterState, selector, poseFrame ->
         PushUpCounterUiState(
             repCount = counterState.count,
             phase = counterState.phase,
             lastAngle = counterState.lastAngle,
             isTracking = counterState.isTracking,
             currentPoseFrame = poseFrame,
-            currentCombinedResult = combinedResult,
             cameraSelector = selector
         )
     }.stateIn(
@@ -72,51 +61,30 @@ class PushUpCounterViewModel : ViewModel() {
     )
     
     /**
-     * Ultra-Performance: Process combined detection result from camera analyzer
-     * @param combinedResult The combined pose and face detection result
+     * Process pose frame result with optimized angle detection
      */
-    fun processCombinedDetectionResult(combinedResult: CombinedDetectionResult) {
+    fun processPoseFrame(poseFrame: PoseFrameResult) {
         viewModelScope.launch {
-            _currentCombinedResult.value = combinedResult
+            _currentPoseFrame.value = poseFrame
             
-            // Process pose if available
-            combinedResult.pose?.let { pose ->
-                // Create pose frame for compatibility
-                val poseFrame = PoseFrameResult(
-                    pose = pose,
-                    imageWidth = combinedResult.imageWidth,
-                    imageHeight = combinedResult.imageHeight,
-                    rotationDegrees = combinedResult.rotationDegrees,
-                    isFrontCamera = combinedResult.isFrontCamera
-                )
-                _currentPoseFrame.value = poseFrame
-                
-                // Calculate elbow angle and update counter with ultra-performance
-                val angleResult = AngleUtils.getBestElbowAngle(pose)
-                if (angleResult != null) {
-                    val (angle, _) = angleResult
-                    pushUpCounter.processAngle(angle)
-                } else {
-                    // No arm detected, stop tracking
-                    pushUpCounter.stopTracking()
-                }
-            } ?: run {
-                // No pose detected, stop tracking
+            // Calculate elbow angle and update counter
+            val angleResult = AngleUtils.getBestElbowAngle(poseFrame.pose)
+            if (angleResult != null) {
+                val (angle, _) = angleResult
+                pushUpCounter.processAngle(angle)
+            } else {
                 pushUpCounter.stopTracking()
             }
         }
     }
     
     /**
-     * Legacy method for backward compatibility: Process pose detection result from camera analyzer
-     * @param poseResult The pose detection result with image dimensions
-     * @param rotationDegrees Camera rotation in degrees (0, 90, 180, 270)
+     * Legacy method for backward compatibility
      */
     fun processPoseResult(poseResult: PoseDetectionResult, rotationDegrees: Int = 0) {
         viewModelScope.launch {
             val isFrontCamera = _cameraSelector.value == CameraSelector.DEFAULT_FRONT_CAMERA
             
-            // Create enhanced pose frame result
             val poseFrame = PoseFrameResult(
                 pose = poseResult.pose,
                 imageWidth = poseResult.imageWidth,
@@ -125,17 +93,7 @@ class PushUpCounterViewModel : ViewModel() {
                 isFrontCamera = isFrontCamera
             )
             
-            _currentPoseFrame.value = poseFrame
-            
-            // Calculate elbow angle and update counter
-            val angleResult = AngleUtils.getBestElbowAngle(poseResult.pose)
-            if (angleResult != null) {
-                val (angle, _) = angleResult
-                pushUpCounter.processAngle(angle)
-            } else {
-                // No arm detected, stop tracking
-                pushUpCounter.stopTracking()
-            }
+            processPoseFrame(poseFrame)
         }
     }
     

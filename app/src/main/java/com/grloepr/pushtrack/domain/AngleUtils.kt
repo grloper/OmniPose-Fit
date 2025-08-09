@@ -5,9 +5,13 @@ import com.google.mlkit.vision.pose.PoseLandmark
 import kotlin.math.*
 
 /**
- * Utility class for calculating angles between pose landmarks
+ * Optimized utility class for calculating angles between pose landmarks
+ * Focused on reliable elbow angle detection for push-ups
  */
 object AngleUtils {
+    
+    // Minimum confidence threshold for reliable landmark detection
+    private const val MIN_CONFIDENCE = 0.5f
     
     /**
      * Calculate elbow angle from wrist, elbow, and shoulder landmarks
@@ -15,7 +19,7 @@ object AngleUtils {
      * @param isLeftArm Whether to calculate for left arm (true) or right arm (false)
      * @return Elbow angle in degrees, or null if landmarks are not detected with sufficient confidence
      */
-    fun calculateElbowAngle(pose: Pose, isLeftArm: Boolean = true): Float? {
+    fun calculateElbowAngle(pose: Pose, isLeftArm: Boolean): Float? {
         val wristType = if (isLeftArm) PoseLandmark.LEFT_WRIST else PoseLandmark.RIGHT_WRIST
         val elbowType = if (isLeftArm) PoseLandmark.LEFT_ELBOW else PoseLandmark.RIGHT_ELBOW
         val shoulderType = if (isLeftArm) PoseLandmark.LEFT_SHOULDER else PoseLandmark.RIGHT_SHOULDER
@@ -25,10 +29,9 @@ object AngleUtils {
         val shoulder = pose.getPoseLandmark(shoulderType)
         
         // Require minimum confidence for all landmarks
-        val minConfidence = 0.5f
-        if (wrist?.inFrameLikelihood ?: 0f < minConfidence ||
-            elbow?.inFrameLikelihood ?: 0f < minConfidence ||
-            shoulder?.inFrameLikelihood ?: 0f < minConfidence) {
+        if (wrist?.inFrameLikelihood ?: 0f < MIN_CONFIDENCE ||
+            elbow?.inFrameLikelihood ?: 0f < MIN_CONFIDENCE ||
+            shoulder?.inFrameLikelihood ?: 0f < MIN_CONFIDENCE) {
             return null
         }
         
@@ -43,8 +46,8 @@ object AngleUtils {
      * Calculate angle between three points
      * @param p1x X coordinate of first point (wrist)
      * @param p1y Y coordinate of first point (wrist)
-     * @param p2x X coordinate of middle point (elbow)
-     * @param p2y Y coordinate of middle point (elbow)
+     * @param p2x X coordinate of middle point (elbow - vertex of angle)
+     * @param p2y Y coordinate of middle point (elbow - vertex of angle)
      * @param p3x X coordinate of third point (shoulder)
      * @param p3y Y coordinate of third point (shoulder)
      * @return Angle in degrees at the middle point
@@ -70,7 +73,7 @@ object AngleUtils {
         val magnitude2 = sqrt(v2x * v2x + v2y * v2y)
         
         // Avoid division by zero
-        if (magnitude1 == 0f || magnitude2 == 0f) {
+        if (magnitude1 < 0.0001f || magnitude2 < 0.0001f) {
             return 0f
         }
         
