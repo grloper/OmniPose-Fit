@@ -64,6 +64,11 @@ fun bindCameraWithAnalysis(
         imageAnalyzer = imageAnalyzer,
         cameraSelector = cameraSelector
     )
+    
+    // If the analyzer is an ImageAnalyzer, inform it about camera facing
+    if (imageAnalyzer is com.grloepr.pushtrack.analysis.ImageAnalyzer) {
+        imageAnalyzer.setCameraFacing(cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA)
+    }
 }
 
 private fun bindCamera(

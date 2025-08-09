@@ -14,12 +14,23 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 /**
- * Data class to hold pose detection results with image dimensions
+ * Data class to hold pose detection results with image dimensions and metadata
  */
 data class PoseDetectionResult(
     val pose: Pose,
     val imageWidth: Int,
     val imageHeight: Int
+)
+
+/**
+ * Enhanced data class to hold pose detection results with frame metadata for overlay alignment
+ */
+data class PoseFrameResult(
+    val pose: Pose,
+    val imageWidth: Int,
+    val imageHeight: Int,
+    val rotationDegrees: Int,
+    val isFrontCamera: Boolean
 )
 
 /**
@@ -35,8 +46,24 @@ class ImageAnalyzer(
     private val targetAnalysisInterval = 1000L / 15L // ~15 FPS (66ms between frames)
     private var isProcessing = false
     
+    // Legacy pose results for backward compatibility
     private val _poseResults = MutableSharedFlow<PoseDetectionResult>(replay = 1)
     val poseResults: SharedFlow<PoseDetectionResult> = _poseResults.asSharedFlow()
+    
+    // Enhanced pose results with frame metadata
+    private val _poseFrameResults = MutableSharedFlow<PoseFrameResult>(replay = 1)
+    val poseFrameResults: SharedFlow<PoseFrameResult> = _poseFrameResults.asSharedFlow()
+    
+    // Camera facing direction - will be set by the camera binding
+    private var isFrontCamera: Boolean = false
+    
+    /**
+     * Set the camera facing direction for proper overlay transformation
+     * @param frontCamera true if front camera is being used
+     */
+    fun setCameraFacing(frontCamera: Boolean) {
+        isFrontCamera = frontCamera
+    }
     
     @SuppressLint("UnsafeOptInUsageError")
     override fun analyze(imageProxy: ImageProxy) {
@@ -59,9 +86,10 @@ class ImageAnalyzer(
                 imageProxy.imageInfo.rotationDegrees
             )
             
-            // Store image dimensions for coordinate transformation
+            // Store image dimensions and metadata for coordinate transformation
             val imageWidth = inputImage.width
             val imageHeight = inputImage.height
+            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             
             // Process pose detection on background thread
             poseDetectorClient.detectPose(
@@ -69,7 +97,20 @@ class ImageAnalyzer(
                 onSuccess = { pose ->
                     // Emit pose results with image dimensions to collectors on background thread
                     analysisScope.launch {
+                        // Legacy result for backward compatibility
                         _poseResults.tryEmit(PoseDetectionResult(pose, imageWidth, imageHeight))
+                        
+                        // Enhanced result with frame metadata
+                        _poseFrameResults.tryEmit(
+                            PoseFrameResult(
+                                pose = pose,
+                                imageWidth = imageWidth,
+                                imageHeight = imageHeight,
+                                rotationDegrees = rotationDegrees,
+                                isFrontCamera = isFrontCamera
+                            )
+                        )
+                        
                         isProcessing = false
                         imageProxy.close()
                     }

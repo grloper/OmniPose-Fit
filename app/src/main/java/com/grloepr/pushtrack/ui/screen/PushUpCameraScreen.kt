@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.mlkit.vision.pose.Pose
 import com.grloepr.pushtrack.analysis.ImageAnalyzer
 import com.grloepr.pushtrack.analysis.PoseDetectionResult
@@ -27,7 +28,11 @@ import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
 import com.grloepr.pushtrack.permission.CameraPermissionRequest
 import com.grloepr.pushtrack.pose.PoseDetectorClient
+import com.grloepr.pushtrack.ui.components.CameraControls
+import com.grloepr.pushtrack.ui.components.MinimalCameraControls
 import com.grloepr.pushtrack.ui.overlay.PoseOverlay
+import com.grloepr.pushtrack.ui.overlay.RepOverlay
+import com.grloepr.pushtrack.viewmodel.PushUpCounterViewModel
 import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,11 +63,9 @@ private fun CameraPreviewScreen() {
     val context = LocalContext.current
     val cameraProvider = rememberCameraProvider()
     
-    // Camera selector state (front/back camera)
-    var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
-    
-    // Push-up counter state
-    var repCount by remember { mutableStateOf(0) }
+    // ViewModel for managing push-up counter state
+    val viewModel: PushUpCounterViewModel = viewModel()
+    val uiState by viewModel.uiState.collectAsState()
     
     // Initialize pose detection components
     val poseDetectorClient = remember { 
@@ -70,13 +73,10 @@ private fun CameraPreviewScreen() {
     }
     val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
     
-    // State for current pose detection result
-    var currentPoseResult by remember { mutableStateOf<PoseDetectionResult?>(null) }
-    
-    // Collect pose results
+    // Collect pose results and process them through ViewModel
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collectLatest { poseResult ->
-            currentPoseResult = poseResult
+            viewModel.processPoseResult(poseResult)
         }
     }
     
@@ -86,7 +86,7 @@ private fun CameraPreviewScreen() {
             poseDetectorClient.close()
         }
     }
-    
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Camera preview
         AndroidView(
@@ -104,43 +104,39 @@ private fun CameraPreviewScreen() {
                         previewView = previewView,
                         lifecycleOwner = lifecycleOwner,
                         imageAnalyzer = imageAnalyzer,
-                        cameraSelector = cameraSelector
+                        cameraSelector = uiState.cameraSelector
                     )
                 }
             }
         )
         
-        // Pose overlay with proper coordinate transformation
-        currentPoseResult?.let { poseResult ->
+        // Enhanced pose overlay with proper coordinate transformation
+        uiState.currentPoseFrame?.let { poseFrame ->
             PoseOverlay(
-                pose = poseResult.pose,
-                imageWidth = poseResult.imageWidth,
-                imageHeight = poseResult.imageHeight,
+                poseFrameResult = poseFrame,
                 modifier = Modifier.fillMaxSize()
             )
         }
         
-        // Overlay UI
-        PushUpOverlay(
-            repCount = repCount,
-            onReset = { repCount = 0 },
-            modifier = Modifier.align(Alignment.TopCenter)
+        // Rep counter overlay
+        RepOverlay(
+            repCount = uiState.repCount,
+            phase = uiState.phase,
+            lastAngle = uiState.lastAngle,
+            isTracking = uiState.isTracking,
+            modifier = Modifier.align(Alignment.TopCenter).padding(16.dp)
         )
         
         // Camera controls
-        CameraControls(
-            onCameraSwitch = { 
-                cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
-                    CameraSelector.DEFAULT_FRONT_CAMERA
-                } else {
-                    CameraSelector.DEFAULT_BACK_CAMERA
-                }
-            },
-            modifier = Modifier.align(Alignment.BottomEnd)
+        MinimalCameraControls(
+            onCameraFlip = { viewModel.toggleCamera() },
+            onReset = { viewModel.reset() },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
         )
     }
 }
 
+// Legacy components for backward compatibility
 @Composable
 private fun PushUpOverlay(
     repCount: Int,
