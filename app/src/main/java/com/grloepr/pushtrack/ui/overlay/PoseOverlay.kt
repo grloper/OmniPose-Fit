@@ -12,24 +12,30 @@ import com.google.mlkit.vision.pose.PoseLandmark
 
 /**
  * Composable that overlays pose detection landmarks on the camera preview
+ * Transforms coordinates to properly align with camera preview
  */
 @Composable
 fun PoseOverlay(
     pose: Pose?,
+    imageWidth: Int = 640,  // Default ML Kit image dimensions
+    imageHeight: Int = 480,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
         pose?.let { detectedPose ->
-            drawPoseLandmarks(detectedPose)
-            drawPoseConnections(detectedPose)
+            val scaleX = size.width / imageWidth
+            val scaleY = size.height / imageHeight
+            
+            drawPoseLandmarks(detectedPose, scaleX, scaleY)
+            drawPoseConnections(detectedPose, scaleX, scaleY)
         }
     }
 }
 
 /**
- * Draw individual pose landmarks as circles
+ * Draw individual pose landmarks as circles with coordinate transformation
  */
-private fun DrawScope.drawPoseLandmarks(pose: Pose) {
+private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float) {
     // Head landmarks
     val headLandmarks = listOf(
         PoseLandmark.NOSE,
@@ -75,7 +81,10 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose) {
                 drawCircle(
                     color = Color.Yellow,
                     radius = 6f,
-                    center = Offset(it.position.x, it.position.y)
+                    center = Offset(
+                        it.position.x * scaleX,
+                        it.position.y * scaleY
+                    )
                 )
             }
         }
@@ -89,21 +98,27 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose) {
                 drawCircle(
                     color = Color.Green,
                     radius = 8f,
-                    center = Offset(it.position.x, it.position.y)
+                    center = Offset(
+                        it.position.x * scaleX,
+                        it.position.y * scaleY
+                    )
                 )
             }
         }
     }
     
-    // Draw lower body landmarks in cyan
+    // Draw lower body landmarks in cyan with more permissive confidence
     lowerBodyLandmarks.forEach { landmarkType ->
         val landmark = pose.getPoseLandmark(landmarkType)
         landmark?.let {
-            if (it.inFrameLikelihood > 0.4f) {
+            if (it.inFrameLikelihood > 0.3f) { // Lowered threshold for better leg detection
                 drawCircle(
                     color = Color.Cyan,
                     radius = 7f,
-                    center = Offset(it.position.x, it.position.y)
+                    center = Offset(
+                        it.position.x * scaleX,
+                        it.position.y * scaleY
+                    )
                 )
             }
         }
@@ -111,9 +126,9 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose) {
 }
 
 /**
- * Draw connections between pose landmarks
+ * Draw connections between pose landmarks with coordinate transformation
  */
-private fun DrawScope.drawPoseConnections(pose: Pose) {
+private fun DrawScope.drawPoseConnections(pose: Pose, scaleX: Float, scaleY: Float) {
     val connections = listOf(
         // Face outline
         Pair(PoseLandmark.LEFT_EAR, PoseLandmark.LEFT_EYE_OUTER),
@@ -157,12 +172,18 @@ private fun DrawScope.drawPoseConnections(pose: Pose) {
         val endLandmark = pose.getPoseLandmark(endType)
         
         if (startLandmark != null && endLandmark != null &&
-            startLandmark.inFrameLikelihood > 0.4f && endLandmark.inFrameLikelihood > 0.4f) {
+            startLandmark.inFrameLikelihood > 0.3f && endLandmark.inFrameLikelihood > 0.3f) {
             
             drawLine(
                 color = Color.Blue,
-                start = Offset(startLandmark.position.x, startLandmark.position.y),
-                end = Offset(endLandmark.position.x, endLandmark.position.y),
+                start = Offset(
+                    startLandmark.position.x * scaleX,
+                    startLandmark.position.y * scaleY
+                ),
+                end = Offset(
+                    endLandmark.position.x * scaleX,
+                    endLandmark.position.y * scaleY
+                ),
                 strokeWidth = 3f
             )
         }

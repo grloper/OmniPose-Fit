@@ -38,13 +38,15 @@ private suspend fun getCameraProvider(context: android.content.Context): Process
 fun bindCameraPreview(
     cameraProvider: ProcessCameraProvider,
     previewView: PreviewView,
-    lifecycleOwner: androidx.lifecycle.LifecycleOwner
+    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+    cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 ) {
     bindCamera(
         cameraProvider = cameraProvider,
         previewView = previewView,
         lifecycleOwner = lifecycleOwner,
-        imageAnalyzer = null
+        imageAnalyzer = null,
+        cameraSelector = cameraSelector
     )
 }
 
@@ -52,13 +54,15 @@ fun bindCameraWithAnalysis(
     cameraProvider: ProcessCameraProvider,
     previewView: PreviewView,
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
-    imageAnalyzer: ImageAnalysis.Analyzer
+    imageAnalyzer: ImageAnalysis.Analyzer,
+    cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 ) {
     bindCamera(
         cameraProvider = cameraProvider,
         previewView = previewView,
         lifecycleOwner = lifecycleOwner,
-        imageAnalyzer = imageAnalyzer
+        imageAnalyzer = imageAnalyzer,
+        cameraSelector = cameraSelector
     )
 }
 
@@ -66,7 +70,8 @@ private fun bindCamera(
     cameraProvider: ProcessCameraProvider,
     previewView: PreviewView,
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
-    imageAnalyzer: ImageAnalysis.Analyzer?
+    imageAnalyzer: ImageAnalysis.Analyzer?,
+    cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 ) {
     // Unbind any existing camera use cases before rebinding
     cameraProvider.unbindAll()
@@ -87,9 +92,6 @@ private fun bindCamera(
                 analysis.setAnalyzer(analysisExecutor, it)
             }
     }
-    
-    // Select back camera as a default
-    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
     
     try {
         // Bind use cases to camera

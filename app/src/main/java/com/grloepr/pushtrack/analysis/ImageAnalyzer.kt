@@ -14,6 +14,15 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 /**
+ * Data class to hold pose detection results with image dimensions
+ */
+data class PoseDetectionResult(
+    val pose: Pose,
+    val imageWidth: Int,
+    val imageHeight: Int
+)
+
+/**
  * ImageAnalyzer that processes camera frames for pose detection
  * Implements frame throttling to target ~15 FPS and runs detection off main thread
  */
@@ -26,8 +35,8 @@ class ImageAnalyzer(
     private val targetAnalysisInterval = 1000L / 15L // ~15 FPS (66ms between frames)
     private var isProcessing = false
     
-    private val _poseResults = MutableSharedFlow<Pose>(replay = 1)
-    val poseResults: SharedFlow<Pose> = _poseResults.asSharedFlow()
+    private val _poseResults = MutableSharedFlow<PoseDetectionResult>(replay = 1)
+    val poseResults: SharedFlow<PoseDetectionResult> = _poseResults.asSharedFlow()
     
     @SuppressLint("UnsafeOptInUsageError")
     override fun analyze(imageProxy: ImageProxy) {
@@ -50,13 +59,17 @@ class ImageAnalyzer(
                 imageProxy.imageInfo.rotationDegrees
             )
             
+            // Store image dimensions for coordinate transformation
+            val imageWidth = inputImage.width
+            val imageHeight = inputImage.height
+            
             // Process pose detection on background thread
             poseDetectorClient.detectPose(
                 image = inputImage,
                 onSuccess = { pose ->
-                    // Emit pose results to collectors on background thread
+                    // Emit pose results with image dimensions to collectors on background thread
                     analysisScope.launch {
-                        _poseResults.tryEmit(pose)
+                        _poseResults.tryEmit(PoseDetectionResult(pose, imageWidth, imageHeight))
                         isProcessing = false
                         imageProxy.close()
                     }
