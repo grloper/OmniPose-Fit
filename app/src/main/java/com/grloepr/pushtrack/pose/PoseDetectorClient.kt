@@ -5,7 +5,6 @@ import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.PoseDetector
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
-
 /**
  * Client for managing ML Kit Pose Detection lifecycle and operations
  */
