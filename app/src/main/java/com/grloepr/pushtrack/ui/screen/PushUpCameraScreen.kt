@@ -23,7 +23,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.mlkit.vision.pose.Pose
 import com.grloepr.pushtrack.analysis.ImageAnalyzer
 import com.grloepr.pushtrack.analysis.PoseDetectionResult
-import com.grloepr.pushtrack.analysis.CombinedDetectionResult
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
@@ -66,27 +65,32 @@ private fun CameraPreviewScreen() {
     val context = LocalContext.current
     val cameraProvider = rememberCameraProvider()
     
+    // State for debug visibility - start with false for better performance
+    var showDebugInfo by remember { mutableStateOf(false) }
+    
     // ViewModel for managing push-up counter state
     val viewModel: PushUpCounterViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsState()
     
-    // Initialize pose detection client
+    // Initialize pose detection client with FAST performance mode instead of accurate
     val poseDetectorClient = remember { 
-        PoseDetectorClient().apply { initialize() }
-    }
-    val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
-    
-    // Collect pose frame results
-    LaunchedEffect(imageAnalyzer) {
-        imageAnalyzer.poseFrameResults.collectLatest { poseFrame ->
-            viewModel.processPoseFrame(poseFrame)
+        PoseDetectorClient().apply { 
+            // Use FAST mode for better performance
+            initializeFast() 
         }
     }
     
-    // Fallback for compatibility
+    val imageAnalyzer = remember { 
+        ImageAnalyzer(poseDetectorClient).apply {
+            // Use HIGH_SPEED mode for smoother camera preview
+            setPerformanceMode(ImageAnalyzer.PerformanceMode.HIGH_SPEED)
+        }
+    }
+    
+    // Collect pose frame results efficiently with collectLatest
     LaunchedEffect(imageAnalyzer) {
-        imageAnalyzer.poseResults.collectLatest { poseResult ->
-            viewModel.processPoseResult(poseResult)
+        imageAnalyzer.poseFrameResults.collectLatest { poseFrame ->
+            viewModel.processPoseFrame(poseFrame)
         }
     }
     
@@ -98,12 +102,12 @@ private fun CameraPreviewScreen() {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Camera preview with optimized settings
+        // Camera preview with high-performance settings
         AndroidView(
             factory = { context ->
                 PreviewView(context).apply {
+                    implementationMode = PreviewView.ImplementationMode.PERFORMANCE
                     scaleType = PreviewView.ScaleType.FILL_CENTER
-                    implementationMode = PreviewView.ImplementationMode.PERFORMANCE // Optimize for performance
                 }
             },
             modifier = Modifier.fillMaxSize(),
@@ -120,15 +124,18 @@ private fun CameraPreviewScreen() {
             }
         )
         
-        // Optimized pose overlay
-        uiState.currentPoseFrame?.let { poseFrame ->
-            PoseOverlay(
-                poseFrameResult = poseFrame,
-                modifier = Modifier.fillMaxSize()
-            )
+        // Only show pose overlay if debug mode is enabled
+        if (showDebugInfo) {
+            uiState.currentPoseFrame?.let { poseFrame ->
+                PoseOverlay(
+                    poseFrameResult = poseFrame,
+                    modifier = Modifier.fillMaxSize(),
+                    debugMode = true
+                )
+            }
         }
         
-        // Simplified rep counter overlay
+        // Rep counter overlay - always show this
         RepOverlay(
             repCount = uiState.repCount,
             phase = uiState.phase,
@@ -136,6 +143,19 @@ private fun CameraPreviewScreen() {
             isTracking = uiState.isTracking,
             modifier = Modifier.align(Alignment.TopCenter).padding(16.dp)
         )
+        
+        // Debug info button with better contrast and clear labeling
+        FloatingActionButton(
+            onClick = { showDebugInfo = !showDebugInfo },
+            modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
+            containerColor = if (showDebugInfo) Color(0xFF4CAF50) else Color(0xFF9E9E9E)
+        ) {
+            Text(
+                text = if (showDebugInfo) "Hide" else "Debug", 
+                color = Color.White,
+                fontSize = 12.sp
+            )
+        }
         
         // Camera controls
         MinimalCameraControls(
