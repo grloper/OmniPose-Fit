@@ -34,6 +34,8 @@ import com.grloepr.pushtrack.ui.components.MinimalCameraControls
 import com.grloepr.pushtrack.ui.overlay.PoseOverlay
 import com.grloepr.pushtrack.ui.overlay.FaceOverlay
 import com.grloepr.pushtrack.ui.overlay.RepOverlay
+import com.grloepr.pushtrack.ui.overlay.GroundPositionRepOverlay
+import com.grloepr.pushtrack.ui.overlay.MinimalGroundPositionRepOverlay
 import com.grloepr.pushtrack.viewmodel.PushUpCounterViewModel
 import kotlinx.coroutines.flow.collectLatest
 
@@ -72,18 +74,18 @@ private fun CameraPreviewScreen() {
     val viewModel: PushUpCounterViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsState()
     
-    // Initialize pose detection client with FAST performance mode instead of accurate
+    // Initialize pose detection client with ULTRA-FAST performance mode
     val poseDetectorClient = remember { 
         PoseDetectorClient().apply { 
-            // Use FAST mode for better performance
+            // Use FASTEST mode for absolute maximum performance
             initializeFast() 
         }
     }
     
     val imageAnalyzer = remember { 
         ImageAnalyzer(poseDetectorClient).apply {
-            // Use HIGH_SPEED mode for smoother camera preview
-            setPerformanceMode(ImageAnalyzer.PerformanceMode.HIGH_SPEED)
+            // Use ULTRA_HIGH_SPEED mode for competitive push-up tracking
+            setPerformanceMode(ImageAnalyzer.PerformanceMode.ULTRA_HIGH_SPEED)
         }
     }
     
@@ -102,7 +104,7 @@ private fun CameraPreviewScreen() {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Camera preview with high-performance settings
+        // Camera preview with ULTRA-HIGH performance settings
         AndroidView(
             factory = { context ->
                 PreviewView(context).apply {
@@ -135,10 +137,12 @@ private fun CameraPreviewScreen() {
             }
         }
         
-        // Rep counter overlay - always show this
-        RepOverlay(
+        // ULTRA-OPTIMIZED rep counter overlay for ground-position detection
+        GroundPositionRepOverlay(
             repCount = uiState.repCount,
             phase = uiState.phase,
+            confidence = uiState.confidence,
+            detectionMethod = uiState.detectionMethod,
             lastAngle = uiState.lastAngle,
             isTracking = uiState.isTracking,
             modifier = Modifier.align(Alignment.TopCenter).padding(16.dp)

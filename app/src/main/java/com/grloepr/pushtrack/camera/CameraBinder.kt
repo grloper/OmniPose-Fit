@@ -11,6 +11,7 @@ import androidx.camera.core.FocusMeteringAction
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import android.util.Size
+import android.util.Range
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -20,12 +21,13 @@ import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
-// Dedicated high-performance thread pool for image analysis
+// ULTRA-HIGH-PERFORMANCE thread pool with maximum priority for real-time analysis
 private val analysisExecutor by lazy {
     Executors.newSingleThreadExecutor { r ->
         Thread(r).apply {
-            name = "PoseAnalysisThread"
-            priority = Thread.MAX_PRIORITY - 1
+            name = "UltraPoseAnalysisThread"
+            priority = Thread.MAX_PRIORITY  // Maximum priority for real-time processing
+            isDaemon = false
         }
     }
 }
@@ -99,28 +101,28 @@ private fun bindCamera(
     // Unbind any existing camera use cases before rebinding
     cameraProvider.unbindAll()
     
-    // EXTREME PERFORMANCE: Use ultra-low resolution for preview (240x180)
-    // This dramatically improves preview FPS while maintaining responsiveness
+    // EXTREME PERFORMANCE: Ultra-low resolution optimized for ground-position selfie push-ups
+    // Even lower resolution for absolute maximum FPS
     val previewResolutionSelector = ResolutionSelector.Builder()
         .setResolutionStrategy(
             ResolutionStrategy(
-                Size(240, 180), // Ultra-low resolution for absolute maximum preview FPS
+                Size(160, 120), // ULTRA-low resolution for maximum preview FPS (ground position doesn't need detail)
                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
             )
         )
         .build()
     
-    // For analysis, use a slightly higher resolution but still optimized (320x240)
+    // For analysis, use minimal resolution but sufficient for pose landmark detection
     val analysisResolutionSelector = ResolutionSelector.Builder()
         .setResolutionStrategy(
             ResolutionStrategy(
-                Size(320, 240), // Lower resolution for better performance with adequate detection
+                Size(192, 144), // Minimal resolution for pose detection (ground position optimized)
                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
             )
         )
         .build()
     
-    // Create optimized preview use case
+    // Create ultra-optimized preview use case
     val preview = Preview.Builder()
         .setResolutionSelector(previewResolutionSelector)
         .build()
@@ -128,13 +130,14 @@ private fun bindCamera(
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
     
-    // Create highly optimized image analysis use case if analyzer provided
+    // Create EXTREME performance image analysis use case
     val imageAnalysis = imageAnalyzer?.let {
         ImageAnalysis.Builder()
             .setResolutionSelector(analysisResolutionSelector)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST) // Critical for performance
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888) // Fastest format
-            .setImageQueueDepth(1) // Minimum queue depth for best performance
+            .setImageQueueDepth(1) // Absolute minimum queue for best performance
+            .setTargetFrameRate(Range(90, 120)) // Ultra-high frame rate range
             .build()
             .also { analysis ->
                 analysis.setAnalyzer(analysisExecutor, it)
