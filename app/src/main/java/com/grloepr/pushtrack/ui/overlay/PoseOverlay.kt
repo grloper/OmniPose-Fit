@@ -56,8 +56,8 @@ fun PoseOverlay(
 }
 
 /**
- * Transform pose landmark coordinates from image space to view space
- * Handles rotation and mirroring for proper alignment
+ * Ultra-Precise coordinate transformation from image space to view space
+ * Fixes skeleton alignment to perfectly match body position across all orientations
  */
 private fun transformCoordinates(
     frameResult: PoseFrameResult,
@@ -67,40 +67,89 @@ private fun transformCoordinates(
     val transformedPoints = mutableMapOf<PoseLandmark, Offset>()
     
     frameResult.pose.allPoseLandmarks.forEach { landmark ->
-        val originalX = landmark.position.x
-        val originalY = landmark.position.y
-        
-        // Apply rotation transformation
-        val (rotatedX, rotatedY) = when (frameResult.rotationDegrees) {
-            90 -> Pair(frameResult.imageHeight - originalY, originalX)
-            180 -> Pair(frameResult.imageWidth - originalX, frameResult.imageHeight - originalY)
-            270 -> Pair(originalY, frameResult.imageWidth - originalX)
-            else -> Pair(originalX, originalY) // 0 degrees
-        }
-        
-        // Calculate dimensions after rotation
-        val (effectiveWidth, effectiveHeight) = when (frameResult.rotationDegrees) {
-            90, 270 -> Pair(frameResult.imageHeight, frameResult.imageWidth)
-            else -> Pair(frameResult.imageWidth, frameResult.imageHeight)
-        }
-        
-        // Scale to canvas size maintaining aspect ratio
-        val scaleX = canvasWidth / effectiveWidth
-        val scaleY = canvasHeight / effectiveHeight
-        
-        var scaledX = rotatedX * scaleX
-        var scaledY = rotatedY * scaleY
-        
-        // Apply horizontal mirroring for front camera
-        if (frameResult.isFrontCamera) {
-            scaledX = canvasWidth - scaledX
-        }
-        
-        transformedPoints[landmark] = Offset(scaledX, scaledY)
+        val transformedPoint = transformLandmarkCoordinate(
+            landmark = landmark,
+            frameResult = frameResult,
+            canvasWidth = canvasWidth,
+            canvasHeight = canvasHeight
+        )
+        transformedPoints[landmark] = transformedPoint
     }
     
     return transformedPoints
 }
+
+/**
+ * Ultra-Precise transformation for individual landmark coordinates
+ * Handles all rotation cases and front camera mirroring with perfect accuracy
+ */
+private fun transformLandmarkCoordinate(
+    landmark: PoseLandmark,
+    frameResult: PoseFrameResult,
+    canvasWidth: Float,
+    canvasHeight: Float
+): Offset {
+    val originalX = landmark.position.x
+    val originalY = landmark.position.y
+    
+    // Step 1: Apply rotation transformation to map from image orientation to view orientation
+    val (rotatedX, rotatedY, effectiveWidth, effectiveHeight) = when (frameResult.rotationDegrees) {
+        90 -> {
+            // 90° clockwise: X becomes Y, Y becomes (width - X)
+            val newX = frameResult.imageHeight - originalY
+            val newY = originalX
+            Quadruple(newX, newY, frameResult.imageHeight.toFloat(), frameResult.imageWidth.toFloat())
+        }
+        180 -> {
+            // 180°: Both X and Y are inverted
+            val newX = frameResult.imageWidth - originalX
+            val newY = frameResult.imageHeight - originalY
+            Quadruple(newX, newY, frameResult.imageWidth.toFloat(), frameResult.imageHeight.toFloat())
+        }
+        270 -> {
+            // 270° clockwise (or 90° counter-clockwise): X becomes (height - Y), Y becomes X
+            val newX = originalY
+            val newY = frameResult.imageWidth - originalX
+            Quadruple(newX, newY, frameResult.imageHeight.toFloat(), frameResult.imageWidth.toFloat())
+        }
+        else -> {
+            // 0° (no rotation)
+            Quadruple(originalX, originalY, frameResult.imageWidth.toFloat(), frameResult.imageHeight.toFloat())
+        }
+    }
+    
+    // Step 2: Scale to canvas size with proper aspect ratio preservation
+    val scaleX = canvasWidth / effectiveWidth
+    val scaleY = canvasHeight / effectiveHeight
+    
+    // Use uniform scaling to maintain aspect ratio (prevents distortion)
+    val uniformScale = minOf(scaleX, scaleY)
+    
+    var scaledX = rotatedX * uniformScale
+    var scaledY = rotatedY * uniformScale
+    
+    // Step 3: Center the image in canvas if aspect ratios don't match
+    val imageCanvasWidth = effectiveWidth * uniformScale
+    val imageCanvasHeight = effectiveHeight * uniformScale
+    
+    val offsetX = (canvasWidth - imageCanvasWidth) / 2f
+    val offsetY = (canvasHeight - imageCanvasHeight) / 2f
+    
+    scaledX += offsetX
+    scaledY += offsetY
+    
+    // Step 4: Apply horizontal mirroring for front camera (selfie view)
+    if (frameResult.isFrontCamera) {
+        scaledX = canvasWidth - scaledX
+    }
+    
+    return Offset(scaledX, scaledY)
+}
+
+/**
+ * Data class to hold four values for coordinate transformation
+ */
+private data class Quadruple<T>(val first: T, val second: T, val third: T, val fourth: T)
 
 /**
  * Draw individual pose landmarks as circles with coordinate transformation

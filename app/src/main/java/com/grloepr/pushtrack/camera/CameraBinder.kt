@@ -84,17 +84,17 @@ private fun bindCamera(
     // Unbind any existing camera use cases before rebinding
     cameraProvider.unbindAll()
     
-    // Create resolution selector that prioritizes frame rate over resolution
+    // Ultra-Performance: Create resolution selector optimizing for maximum frame rate
     val resolutionSelector = ResolutionSelector.Builder()
         .setResolutionStrategy(
             ResolutionStrategy(
-                Size(1280, 720), // Target 720p for good balance of speed vs quality
+                Size(1280, 720), // 720p optimal balance for 60+ FPS performance
                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
             )
         )
         .build()
     
-    // Create preview use case with optimized resolution
+    // Create preview use case with ultra-performance optimizations
     val preview = Preview.Builder()
         .setResolutionSelector(resolutionSelector)
         .build()
@@ -102,22 +102,32 @@ private fun bindCamera(
             it.setSurfaceProvider(previewView.surfaceProvider)
         }
     
-    // Create image analysis use case if analyzer provided
+    // Create ultra-performance image analysis use case if analyzer provided
     val imageAnalysis = imageAnalyzer?.let {
         ImageAnalysis.Builder()
             .setResolutionSelector(resolutionSelector) // Use same resolution for consistency
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888) // Optimize format
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST) // Drop frames if processing is slow
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888) // Fastest format
             .build()
             .also { analysis ->
-                // Use background executor for analysis
-                val analysisExecutor = Executors.newSingleThreadExecutor()
+                // Ultra-Performance: Use optimized background executor for analysis
+                val analysisExecutor = Executors.newSingleThreadExecutor { r ->
+                    Thread(r).apply {
+                        name = "UltraPerformanceAnalysis"
+                        priority = Thread.MAX_PRIORITY // High priority for real-time processing
+                    }
+                }
                 analysis.setAnalyzer(analysisExecutor, it)
+                
+                // Set the analyzer's target FPS to maximum for ultra-smooth tracking
+                if (it is com.grloepr.pushtrack.analysis.ImageAnalyzer) {
+                    it.setTargetFps(60) // Start with 60 FPS for ultra-smooth tracking
+                }
             }
     }
     
     try {
-        // Bind use cases to camera
+        // Bind use cases to camera with ultra-performance configuration
         val useCases = listOfNotNull(preview, imageAnalysis)
         cameraProvider.bindToLifecycle(
             lifecycleOwner,

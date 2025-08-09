@@ -12,6 +12,7 @@ composeBom = "2024.09.00"
 camerax = "1.3.4"
 mlkit-pose-detection = "18.0.0-beta4"
 mlkit-pose-detection-accurate = "18.0.0-beta4"
+mlkit-face-detection = "16.1.6"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -35,6 +36,7 @@ androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycl
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 mlkit-pose-detection = { group = "com.google.mlkit", name = "pose-detection", version.ref = "mlkit-pose-detection" }
 mlkit-pose-detection-accurate = { group = "com.google.mlkit", name = "pose-detection-accurate", version.ref = "mlkit-pose-detection-accurate" }
+mlkit-face-detection = { group = "com.google.mlkit", name = "face-detection", version.ref = "mlkit-face-detection" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

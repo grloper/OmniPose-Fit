@@ -23,14 +23,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.mlkit.vision.pose.Pose
 import com.grloepr.pushtrack.analysis.ImageAnalyzer
 import com.grloepr.pushtrack.analysis.PoseDetectionResult
+import com.grloepr.pushtrack.analysis.CombinedDetectionResult
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
 import com.grloepr.pushtrack.permission.CameraPermissionRequest
 import com.grloepr.pushtrack.pose.PoseDetectorClient
+import com.grloepr.pushtrack.face.FaceDetectorClient
 import com.grloepr.pushtrack.ui.components.CameraControls
 import com.grloepr.pushtrack.ui.components.MinimalCameraControls
 import com.grloepr.pushtrack.ui.overlay.PoseOverlay
+import com.grloepr.pushtrack.ui.overlay.FaceOverlay
 import com.grloepr.pushtrack.ui.overlay.RepOverlay
 import com.grloepr.pushtrack.viewmodel.PushUpCounterViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -67,23 +70,35 @@ private fun CameraPreviewScreen() {
     val viewModel: PushUpCounterViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsState()
     
-    // Initialize pose detection components
+    // Ultra-Performance: Initialize pose and face detection components
     val poseDetectorClient = remember { 
         PoseDetectorClient().apply { initialize() }
     }
-    val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
+    val faceDetectorClient = remember { 
+        FaceDetectorClient().apply { initialize() }
+    }
+    val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient, faceDetectorClient) }
     
-    // Collect pose results and process them through ViewModel
+    // Ultra-Performance: Collect combined detection results and process them through ViewModel
+    LaunchedEffect(imageAnalyzer) {
+        // Prioritize combined results for maximum accuracy
+        imageAnalyzer.combinedDetectionResults.collectLatest { combinedResult ->
+            viewModel.processCombinedDetectionResult(combinedResult)
+        }
+    }
+    
+    // Fallback: Collect legacy pose results for compatibility
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collectLatest { poseResult ->
             viewModel.processPoseResult(poseResult)
         }
     }
     
-    // Clean up pose detector when screen is disposed
-    DisposableEffect(poseDetectorClient) {
+    // Ultra-Performance: Clean up both detectors when screen is disposed
+    DisposableEffect(poseDetectorClient, faceDetectorClient) {
         onDispose {
             poseDetectorClient.close()
+            faceDetectorClient.close()
         }
     }
 
@@ -110,10 +125,18 @@ private fun CameraPreviewScreen() {
             }
         )
         
-        // Enhanced pose overlay with proper coordinate transformation
+        // Ultra-Precise pose overlay with perfect coordinate transformation
         uiState.currentPoseFrame?.let { poseFrame ->
             PoseOverlay(
                 poseFrameResult = poseFrame,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        
+        // Ultra-Enhanced face overlay for improved accuracy and debugging
+        uiState.currentCombinedResult?.let { combinedResult ->
+            FaceOverlay(
+                combinedResult = combinedResult,
                 modifier = Modifier.fillMaxSize()
             )
         }

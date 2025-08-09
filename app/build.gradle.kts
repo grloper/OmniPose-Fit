@@ -56,6 +56,7 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.pose.detection)
     implementation(libs.mlkit.pose.detection.accurate)
+    implementation(libs.mlkit.face.detection)
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
