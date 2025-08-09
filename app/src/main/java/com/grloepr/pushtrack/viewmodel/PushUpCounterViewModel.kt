@@ -3,26 +3,19 @@ package com.grloepr.pushtrack.viewmodel
 import androidx.camera.core.CameraSelector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.mlkit.vision.pose.Pose
 import com.grloepr.pushtrack.analysis.PoseDetectionResult
+import com.grloepr.pushtrack.analysis.PoseFrameResult
 import com.grloepr.pushtrack.domain.AngleUtils
 import com.grloepr.pushtrack.domain.PushUpCounter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/**
- * Enhanced data class to hold pose detection results with frame metadata
- */
-data class PoseFrameResult(
-    val pose: Pose,
-    val imageWidth: Int,
-    val imageHeight: Int,
-    val rotationDegrees: Int,
-    val isFrontCamera: Boolean
-)
+// Use PoseFrameResult from analysis package as the single source of truth
 
 /**
  * UI state for the push-up counter screen
@@ -54,7 +47,9 @@ class PushUpCounterViewModel : ViewModel() {
         pushUpCounter.state,
         _cameraSelector,
         _currentPoseFrame
-    ) { counterState, selector, poseFrame ->
+    ) { counterState: PushUpCounter.CounterState,
+        selector: CameraSelector,
+        poseFrame: PoseFrameResult? ->
         PushUpCounterUiState(
             repCount = counterState.count,
             phase = counterState.phase,
@@ -63,7 +58,11 @@ class PushUpCounterViewModel : ViewModel() {
             currentPoseFrame = poseFrame,
             cameraSelector = selector
         )
-    }
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        PushUpCounterUiState()
+    )
     
     /**
      * Process pose detection result from camera analyzer
