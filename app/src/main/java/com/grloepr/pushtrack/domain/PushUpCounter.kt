@@ -6,11 +6,12 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * State machine for counting push-ups based on elbow angle thresholds
+ * Optimized for fast response with reduced smoothing lag
  */
 class PushUpCounter(
     private val downThreshold: Float = 70f,  // Angle threshold for "down" position
     private val upThreshold: Float = 160f,   // Angle threshold for "up" position
-    private val debounceMs: Long = 250L      // Minimum time between state changes
+    private val debounceMs: Long = 150L      // Reduced debounce for faster response (was 250ms)
 ) {
     
     /**
@@ -35,22 +36,30 @@ class PushUpCounter(
     val state: StateFlow<CounterState> = _state.asStateFlow()
     
     private var lastPhaseChangeTime = 0L
-    private val angleHistory = ArrayDeque<Float>(5) // Keep last 5 angles for smoothing
+    private val angleHistory = ArrayDeque<Float>(3) // Reduced from 5 to 3 for faster response
+    private var lastProcessedAngle = 0f
+    private val angleChangeThreshold = 5f // Skip processing if angle change is minimal
     
     /**
-     * Process a new elbow angle measurement
+     * Process a new elbow angle measurement with frame skipping for performance
      * @param angle The elbow angle in degrees
      */
     fun processAngle(angle: Float) {
+        // Skip processing if angle change is minimal (frame skipping optimization)
+        if (angleHistory.isNotEmpty() && kotlin.math.abs(angle - lastProcessedAngle) < angleChangeThreshold) {
+            return
+        }
+        
         val currentTime = System.currentTimeMillis()
+        lastProcessedAngle = angle
         
         // Add angle to history for smoothing
         angleHistory.addLast(angle)
-        if (angleHistory.size > 5) {
+        if (angleHistory.size > 3) { // Reduced window size
             angleHistory.removeFirst()
         }
         
-        // Calculate smoothed angle using Exponential Moving Average (EMA)
+        // Calculate smoothed angle using faster EMA instead of median
         val smoothedAngle = calculateSmoothedAngle()
         
         val currentState = _state.value
@@ -85,20 +94,20 @@ class PushUpCounter(
     }
     
     /**
-     * Calculate smoothed angle using Exponential Moving Average
+     * Calculate smoothed angle using Exponential Moving Average for faster response
      */
     private fun calculateSmoothedAngle(): Float {
         if (angleHistory.isEmpty()) return 0f
         if (angleHistory.size == 1) return angleHistory.first()
         
-        // Use median of last N angles for robustness against outliers
-        val sortedAngles = angleHistory.sorted()
-        return if (sortedAngles.size % 2 == 0) {
-            val mid = sortedAngles.size / 2
-            (sortedAngles[mid - 1] + sortedAngles[mid]) / 2f
-        } else {
-            sortedAngles[sortedAngles.size / 2]
+        // Use EMA (Exponential Moving Average) for faster response than median
+        // Gives more weight to recent values
+        val alpha = 0.7f // High alpha for responsiveness 
+        var ema = angleHistory.first()
+        for (i in 1 until angleHistory.size) {
+            ema = alpha * angleHistory[i] + (1 - alpha) * ema
         }
+        return ema
     }
     
     /**
@@ -125,6 +134,7 @@ class PushUpCounter(
         _state.value = CounterState()
         angleHistory.clear()
         lastPhaseChangeTime = 0L
+        lastProcessedAngle = 0f
     }
     
     /**
@@ -136,6 +146,7 @@ class PushUpCounter(
             lastAngle = null
         )
         angleHistory.clear()
+        lastProcessedAngle = 0f
     }
     
     /**

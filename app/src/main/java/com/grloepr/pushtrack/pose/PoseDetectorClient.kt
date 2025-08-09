@@ -13,7 +13,7 @@ class PoseDetectorClient {
     private var poseDetector: PoseDetector? = null
     
     /**
-     * Initialize the pose detector with accurate model configuration for better precision
+     * Initialize the pose detector optimized for speed over accuracy for real-time push-up counting
      */
     fun initialize() {
         if (poseDetector == null) {

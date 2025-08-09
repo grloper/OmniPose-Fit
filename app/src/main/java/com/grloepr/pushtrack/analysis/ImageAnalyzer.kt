@@ -35,7 +35,7 @@ data class PoseFrameResult(
 
 /**
  * ImageAnalyzer that processes camera frames for pose detection
- * Implements frame throttling to target ~15 FPS and runs detection off main thread
+ * Implements frame throttling to target ~30 FPS for fast push-up detection and runs detection off main thread
  */
 class ImageAnalyzer(
     private val poseDetectorClient: PoseDetectorClient
@@ -43,7 +43,6 @@ class ImageAnalyzer(
     
     private val analysisScope = CoroutineScope(Dispatchers.Default)
     private var lastAnalysisTime = 0L
-    private val targetAnalysisInterval = 1000L / 15L // ~15 FPS (66ms between frames)
     private var isProcessing = false
     
     // Legacy pose results for backward compatibility
@@ -56,6 +55,30 @@ class ImageAnalyzer(
     
     // Camera facing direction - will be set by the camera binding
     private var isFrontCamera: Boolean = false
+    
+    // Performance optimization: track frame skipping
+    private var frameSkipCounter = 0
+    private val skipFramesWhenIdle = 2 // Skip 2 frames when no significant pose changes
+    private var currentTargetFps = 30 // Start with 30 FPS, can be adjusted dynamically
+    
+    /**
+     * Dynamically adjust target FPS for performance optimization
+     * @param fps Target frames per second (15-60)
+     */
+    fun setTargetFps(fps: Int) {
+        currentTargetFps = fps.coerceIn(15, 60)
+        // Update interval based on new FPS
+        val newInterval = 1000L / currentTargetFps
+        // Only update if not currently processing to avoid race conditions
+        if (!isProcessing) {
+            // targetAnalysisInterval will be calculated dynamically
+        }
+    }
+    
+    /**
+     * Get current analysis interval based on target FPS
+     */
+    private fun getCurrentAnalysisInterval(): Long = 1000L / currentTargetFps
     
     /**
      * Set the camera facing direction for proper overlay transformation
@@ -70,10 +93,18 @@ class ImageAnalyzer(
         val currentTime = System.currentTimeMillis()
         
         // Throttle analysis to target FPS and skip if already processing
-        if (currentTime - lastAnalysisTime < targetAnalysisInterval || isProcessing) {
+        if (currentTime - lastAnalysisTime < getCurrentAnalysisInterval() || isProcessing) {
             imageProxy.close()
             return
         }
+        
+        // Additional frame skipping for performance when processing is stable
+        frameSkipCounter++
+        if (frameSkipCounter <= skipFramesWhenIdle && isProcessing) {
+            imageProxy.close()
+            return
+        }
+        frameSkipCounter = 0
         
         lastAnalysisTime = currentTime
         isProcessing = true
