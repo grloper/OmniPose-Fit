@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -81,7 +82,9 @@ private fun bindCamera(
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
             .also { analysis ->
-                analysis.setAnalyzer(ContextCompat.getMainExecutor(previewView.context), it)
+                // Use background executor for analysis
+                val analysisExecutor = Executors.newSingleThreadExecutor()
+                analysis.setAnalyzer(analysisExecutor, it)
             }
     }
     

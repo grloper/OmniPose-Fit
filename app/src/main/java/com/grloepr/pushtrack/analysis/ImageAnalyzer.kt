@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * ImageAnalyzer that processes camera frames for pose detection
- * Implements frame throttling to target ~15 FPS
+ * Implements frame throttling to target ~15 FPS and runs detection off main thread
  */
 class ImageAnalyzer(
     private val poseDetectorClient: PoseDetectorClient
@@ -24,6 +24,7 @@ class ImageAnalyzer(
     private val analysisScope = CoroutineScope(Dispatchers.Default)
     private var lastAnalysisTime = 0L
     private val targetAnalysisInterval = 1000L / 15L // ~15 FPS (66ms between frames)
+    private var isProcessing = false
     
     private val _poseResults = MutableSharedFlow<Pose>(replay = 1)
     val poseResults: SharedFlow<Pose> = _poseResults.asSharedFlow()
@@ -32,13 +33,14 @@ class ImageAnalyzer(
     override fun analyze(imageProxy: ImageProxy) {
         val currentTime = System.currentTimeMillis()
         
-        // Throttle analysis to target FPS
-        if (currentTime - lastAnalysisTime < targetAnalysisInterval) {
+        // Throttle analysis to target FPS and skip if already processing
+        if (currentTime - lastAnalysisTime < targetAnalysisInterval || isProcessing) {
             imageProxy.close()
             return
         }
         
         lastAnalysisTime = currentTime
+        isProcessing = true
         
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
@@ -49,22 +51,27 @@ class ImageAnalyzer(
             )
             
             // Process pose detection on background thread
-            analysisScope.launch {
-                poseDetectorClient.detectPose(
-                    image = inputImage,
-                    onSuccess = { pose ->
-                        // Emit pose results to collectors
+            poseDetectorClient.detectPose(
+                image = inputImage,
+                onSuccess = { pose ->
+                    // Emit pose results to collectors on background thread
+                    analysisScope.launch {
                         _poseResults.tryEmit(pose)
-                        imageProxy.close()
-                    },
-                    onFailure = { exception ->
-                        // Log error but continue processing
-                        println("Pose detection failed: ${exception.message}")
+                        isProcessing = false
                         imageProxy.close()
                     }
-                )
-            }
+                },
+                onFailure = { exception ->
+                    // Log error but continue processing
+                    analysisScope.launch {
+                        println("Pose detection failed: ${exception.message}")
+                        isProcessing = false
+                        imageProxy.close()
+                    }
+                }
+            )
         } else {
+            isProcessing = false
             imageProxy.close()
         }
     }
