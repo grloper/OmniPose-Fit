@@ -14,12 +14,13 @@ class PoseDetectorClient {
     private var poseDetector: PoseDetector? = null
     
     /**
-     * Initialize the pose detector with base model configuration
+     * Initialize the pose detector with accurate model configuration for better precision
      */
     fun initialize() {
         if (poseDetector == null) {
             val options = PoseDetectorOptions.Builder()
                 .setDetectorMode(PoseDetectorOptions.STREAM_MODE)
+                .setPreferredHardwareConfigs(PoseDetectorOptions.CPU_GPU)
                 .build()
             
             poseDetector = PoseDetection.getClient(options)
