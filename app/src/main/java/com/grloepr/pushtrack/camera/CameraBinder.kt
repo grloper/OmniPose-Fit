@@ -1,6 +1,7 @@
 package com.grloepr.pushtrack.camera
 
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -38,6 +39,34 @@ fun bindCameraPreview(
     previewView: PreviewView,
     lifecycleOwner: androidx.lifecycle.LifecycleOwner
 ) {
+    bindCamera(
+        cameraProvider = cameraProvider,
+        previewView = previewView,
+        lifecycleOwner = lifecycleOwner,
+        imageAnalyzer = null
+    )
+}
+
+fun bindCameraWithAnalysis(
+    cameraProvider: ProcessCameraProvider,
+    previewView: PreviewView,
+    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+    imageAnalyzer: ImageAnalysis.Analyzer
+) {
+    bindCamera(
+        cameraProvider = cameraProvider,
+        previewView = previewView,
+        lifecycleOwner = lifecycleOwner,
+        imageAnalyzer = imageAnalyzer
+    )
+}
+
+private fun bindCamera(
+    cameraProvider: ProcessCameraProvider,
+    previewView: PreviewView,
+    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+    imageAnalyzer: ImageAnalysis.Analyzer?
+) {
     // Unbind any existing camera use cases before rebinding
     cameraProvider.unbindAll()
     
@@ -46,15 +75,26 @@ fun bindCameraPreview(
         it.setSurfaceProvider(previewView.surfaceProvider)
     }
     
+    // Create image analysis use case if analyzer provided
+    val imageAnalysis = imageAnalyzer?.let {
+        ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+            .also { analysis ->
+                analysis.setAnalyzer(ContextCompat.getMainExecutor(previewView.context), it)
+            }
+    }
+    
     // Select back camera as a default
     val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
     
     try {
         // Bind use cases to camera
+        val useCases = listOfNotNull(preview, imageAnalysis)
         cameraProvider.bindToLifecycle(
             lifecycleOwner,
             cameraSelector,
-            preview
+            *useCases.toTypedArray()
         )
     } catch (exc: Exception) {
         // Handle any errors (e.g., camera not available)

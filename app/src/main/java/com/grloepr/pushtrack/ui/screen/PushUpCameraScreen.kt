@@ -15,10 +15,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.grloepr.pushtrack.camera.bindCameraPreview
+import com.google.mlkit.vision.pose.Pose
+import com.grloepr.pushtrack.analysis.ImageAnalyzer
+import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
 import com.grloepr.pushtrack.permission.CameraPermissionRequest
+import com.grloepr.pushtrack.pose.PoseDetectorClient
+import com.grloepr.pushtrack.ui.overlay.PoseOverlay
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +53,29 @@ private fun CameraPreviewScreen() {
     val context = LocalContext.current
     val cameraProvider = rememberCameraProvider()
     
+    // Initialize pose detection components
+    val poseDetectorClient = remember { 
+        PoseDetectorClient().apply { initialize() }
+    }
+    val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
+    
+    // State for current pose
+    var currentPose by remember { mutableStateOf<Pose?>(null) }
+    
+    // Collect pose results
+    LaunchedEffect(imageAnalyzer) {
+        imageAnalyzer.poseResults.collectLatest { pose ->
+            currentPose = pose
+        }
+    }
+    
+    // Clean up pose detector when screen is disposed
+    DisposableEffect(poseDetectorClient) {
+        onDispose {
+            poseDetectorClient.close()
+        }
+    }
+    
     Box(modifier = Modifier.fillMaxSize()) {
         // Camera preview
         AndroidView(
@@ -60,13 +88,20 @@ private fun CameraPreviewScreen() {
             modifier = Modifier.fillMaxSize(),
             update = { previewView ->
                 cameraProvider?.let { provider ->
-                    bindCameraPreview(
+                    bindCameraWithAnalysis(
                         cameraProvider = provider,
                         previewView = previewView,
-                        lifecycleOwner = lifecycleOwner
+                        lifecycleOwner = lifecycleOwner,
+                        imageAnalyzer = imageAnalyzer
                     )
                 }
             }
+        )
+        
+        // Pose overlay
+        PoseOverlay(
+            pose = currentPose,
+            modifier = Modifier.fillMaxSize()
         )
         
         // Overlay UI
