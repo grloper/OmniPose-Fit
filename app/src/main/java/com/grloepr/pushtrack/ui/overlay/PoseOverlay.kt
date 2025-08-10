@@ -19,6 +19,7 @@ fun PoseOverlay(
     pose: Pose?,
     imageWidth: Int = 640,  // Default ML Kit image dimensions
     imageHeight: Int = 480,
+    isFrontCamera: Boolean = false,  // Whether front camera is being used
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
@@ -26,8 +27,8 @@ fun PoseOverlay(
             val scaleX = size.width / imageWidth
             val scaleY = size.height / imageHeight
             
-            drawPoseLandmarks(detectedPose, scaleX, scaleY)
-            drawPoseConnections(detectedPose, scaleX, scaleY)
+            drawPoseLandmarks(detectedPose, scaleX, scaleY, isFrontCamera, imageWidth)
+            drawPoseConnections(detectedPose, scaleX, scaleY, isFrontCamera, imageWidth)
         }
     }
 }
@@ -35,7 +36,7 @@ fun PoseOverlay(
 /**
  * Draw individual pose landmarks as circles with coordinate transformation
  */
-private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float) {
+private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float, isFrontCamera: Boolean, imageWidth: Int) {
     // Head landmarks
     val headLandmarks = listOf(
         PoseLandmark.NOSE,
@@ -78,11 +79,12 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float
         val landmark = pose.getPoseLandmark(landmarkType)
         landmark?.let {
             if (it.inFrameLikelihood > 0.6f) {
+                val x = if (isFrontCamera) imageWidth - it.position.x else it.position.x
                 drawCircle(
                     color = Color.Yellow,
                     radius = 6f,
                     center = Offset(
-                        it.position.x * scaleX,
+                        x * scaleX,
                         it.position.y * scaleY
                     )
                 )
@@ -95,11 +97,12 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float
         val landmark = pose.getPoseLandmark(landmarkType)
         landmark?.let {
             if (it.inFrameLikelihood > 0.5f) {
+                val x = if (isFrontCamera) imageWidth - it.position.x else it.position.x
                 drawCircle(
                     color = Color.Green,
                     radius = 8f,
                     center = Offset(
-                        it.position.x * scaleX,
+                        x * scaleX,
                         it.position.y * scaleY
                     )
                 )
@@ -112,11 +115,12 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float
         val landmark = pose.getPoseLandmark(landmarkType)
         landmark?.let {
             if (it.inFrameLikelihood > 0.3f) { // Lowered threshold for better leg detection
+                val x = if (isFrontCamera) imageWidth - it.position.x else it.position.x
                 drawCircle(
                     color = Color.Cyan,
                     radius = 7f,
                     center = Offset(
-                        it.position.x * scaleX,
+                        x * scaleX,
                         it.position.y * scaleY
                     )
                 )
@@ -128,7 +132,7 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float
 /**
  * Draw connections between pose landmarks with coordinate transformation
  */
-private fun DrawScope.drawPoseConnections(pose: Pose, scaleX: Float, scaleY: Float) {
+private fun DrawScope.drawPoseConnections(pose: Pose, scaleX: Float, scaleY: Float, isFrontCamera: Boolean, imageWidth: Int) {
     val connections = listOf(
         // Face outline
         Pair(PoseLandmark.LEFT_EAR, PoseLandmark.LEFT_EYE_OUTER),
@@ -174,14 +178,17 @@ private fun DrawScope.drawPoseConnections(pose: Pose, scaleX: Float, scaleY: Flo
         if (startLandmark != null && endLandmark != null &&
             startLandmark.inFrameLikelihood > 0.3f && endLandmark.inFrameLikelihood > 0.3f) {
             
+            val startX = if (isFrontCamera) imageWidth - startLandmark.position.x else startLandmark.position.x
+            val endX = if (isFrontCamera) imageWidth - endLandmark.position.x else endLandmark.position.x
+            
             drawLine(
                 color = Color.Blue,
                 start = Offset(
-                    startLandmark.position.x * scaleX,
+                    startX * scaleX,
                     startLandmark.position.y * scaleY
                 ),
                 end = Offset(
-                    endLandmark.position.x * scaleX,
+                    endX * scaleX,
                     endLandmark.position.y * scaleY
                 ),
                 strokeWidth = 3f
