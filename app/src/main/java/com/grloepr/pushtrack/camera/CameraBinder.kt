@@ -11,12 +11,10 @@ import androidx.camera.core.FocusMeteringAction
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import android.util.Size
-import android.util.Range
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
-import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -102,11 +100,10 @@ private fun bindCamera(
     cameraProvider.unbindAll()
     
     // EXTREME PERFORMANCE: Ultra-low resolution optimized for ground-position selfie push-ups
-    // Even lower resolution for absolute maximum FPS
     val previewResolutionSelector = ResolutionSelector.Builder()
         .setResolutionStrategy(
             ResolutionStrategy(
-                Size(160, 120), // ULTRA-low resolution for maximum preview FPS (ground position doesn't need detail)
+                Size(160, 120), // ULTRA-low resolution for maximum preview FPS
                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
             )
         )
@@ -116,7 +113,7 @@ private fun bindCamera(
     val analysisResolutionSelector = ResolutionSelector.Builder()
         .setResolutionStrategy(
             ResolutionStrategy(
-                Size(192, 144), // Minimal resolution for pose detection (ground position optimized)
+                Size(192, 144), // Minimal resolution for pose detection
                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
             )
         )
@@ -132,16 +129,17 @@ private fun bindCamera(
     
     // Create EXTREME performance image analysis use case
     val imageAnalysis = imageAnalyzer?.let {
-        ImageAnalysis.Builder()
+        val analysis = ImageAnalysis.Builder()
             .setResolutionSelector(analysisResolutionSelector)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST) // Critical for performance
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888) // Fastest format
             .setImageQueueDepth(1) // Absolute minimum queue for best performance
-            .setTargetFrameRate(Range(90, 120)) // Ultra-high frame rate range
             .build()
-            .also { analysis ->
-                analysis.setAnalyzer(analysisExecutor, it)
-            }
+            
+        // Use setAnalyzer method instead of direct property assignment
+        analysis.setAnalyzer(analysisExecutor, it)
+        
+        analysis
     }
     
     try {
@@ -155,7 +153,6 @@ private fun bindCamera(
         
         // Apply camera performance optimizations
         camera.cameraControl.apply {
-            // Enable camera frame rate range optimized for preview smoothness
             enableTorch(false) // Ensure torch is off for better performance
             
             // Set auto-focus to continuous picture mode for smoother preview

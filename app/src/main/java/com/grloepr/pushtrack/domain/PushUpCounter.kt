@@ -3,6 +3,8 @@ package com.grloepr.pushtrack.domain
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.abs
+
 
 /**
  * ULTRA-OPTIMIZED push-up counter for ground-position selfie use case
