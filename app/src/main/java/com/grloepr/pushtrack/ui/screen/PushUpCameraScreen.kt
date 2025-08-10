@@ -6,8 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cameraswitch
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,19 +19,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.mlkit.vision.pose.Pose
-import com.grloepr.pushtrack.analysis.ImageAnalyzer
-import com.grloepr.pushtrack.analysis.PoseDetectionResult
-import com.grloepr.pushtrack.analysis.PoseFrameResult
-import com.grloepr.pushtrack.analysis.PushUpDetector
-import com.grloepr.pushtrack.analysis.PushUpState
+import com.grloepr.pushtrack.analysis.*
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
+import com.grloepr.pushtrack.feedback.*
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
 import com.grloepr.pushtrack.permission.CameraPermissionRequest
 import com.grloepr.pushtrack.pose.PoseDetectorClient
+import com.grloepr.pushtrack.settings.SettingsManager
+import com.grloepr.pushtrack.ui.components.*
 import com.grloepr.pushtrack.ui.overlay.EnhancedPoseOverlay
 import com.grloepr.pushtrack.ui.overlay.PoseOverlay
-import com.grloepr.pushtrack.domain.GroundPositionPushUpDetector.PushUpPhase
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 
@@ -78,14 +75,27 @@ private fun CameraPreviewScreen() {
     val context = LocalContext.current
     val cameraProvider = rememberCameraProvider()
     
+    // Initialize settings manager and voice feedback
+    val settingsManager = remember { SettingsManager(context) }
+    val voiceFeedbackManager = remember { VoiceFeedbackManager(context) }
+    
     // Camera selector state (front/back camera)
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
     
     // Push-up counter state
-    var repCount by remember { mutableStateOf(0) }
+    var pushUpResult by remember { mutableStateOf(PushUpResult(0, PushUpState.UNKNOWN, null)) }
     
-    // Debug mode toggle
-    var showDebugInfo by remember { mutableStateOf(false) }
+    // UI state
+    var showSettingsCard by remember { mutableStateOf(false) }
+    var showSummary by remember { mutableStateOf(false) }
+    var workoutStartTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    var currentFeedbackMessage by remember { mutableStateOf<String?>(null) }
+    
+    // Collect settings
+    val voiceEnabled by settingsManager.voiceEnabled.collectAsState()
+    val speechRate by settingsManager.speechRate.collectAsState()
+    val showDebugInfo by settingsManager.showDebugInfo.collectAsState()
+    val enhancedUI by settingsManager.enhancedUI.collectAsState()
     
     // Initialize push-up detector
     val pushUpDetector = remember { PushUpDetector() }
@@ -99,21 +109,80 @@ private fun CameraPreviewScreen() {
     // State for current pose detection result
     var currentPoseResult by remember { mutableStateOf<PoseDetectionResult?>(null) }
     
+    // Update voice feedback settings when they change
+    LaunchedEffect(voiceEnabled, speechRate) {
+        voiceFeedbackManager.updateSettings(
+            enabled = voiceEnabled,
+            speechRate = speechRate
+        )
+    }
+    
     // Collect pose results and process push-ups
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
-            // Process pose for push-up detection
-            val newRepCount = pushUpDetector.processPose(poseResult.pose)
-            repCount = newRepCount
+            
+            // Process pose for push-up detection with enhanced analysis
+            val newResult = pushUpDetector.processPoseWithAnalysis(poseResult.pose)
+            
+            // Announce new rep count
+            if (newResult.repCount > pushUpResult.repCount) {
+                voiceFeedbackManager.announceRepCount(newResult.repCount)
+            }
+            
+            // Handle posture feedback
+            newResult.postureAnalysis?.feedback?.let { feedback ->
+                voiceFeedbackManager.announcePostureFeedback(feedback)
+                currentFeedbackMessage = when (feedback) {
+                    PostureFeedback.GOOD_FORM -> "Good form!"
+                    PostureFeedback.LOWER_BODY -> "Lower your body more"
+                    PostureFeedback.RAISE_BODY -> "Push up higher"
+                    PostureFeedback.STRAIGHTEN_BACK -> "Keep your back straight"
+                    PostureFeedback.ALIGN_HANDS -> "Align your hands"
+                    PostureFeedback.SLOW_DOWN -> "Slow down"
+                    PostureFeedback.KEEP_GOING -> "Keep going!"
+                }
+                
+                // Clear feedback message after delay
+                kotlinx.coroutines.delay(3000)
+                currentFeedbackMessage = null
+            }
+            
+            pushUpResult = newResult
         }
     }
     
-    // Clean up pose detector when screen is disposed
-    DisposableEffect(poseDetectorClient) {
+    // Clean up when screen is disposed
+    DisposableEffect(poseDetectorClient, voiceFeedbackManager) {
         onDispose {
             poseDetectorClient.close()
+            voiceFeedbackManager.shutdown()
         }
+    }
+
+    // Show workout summary if requested
+    if (showSummary) {
+        val workoutDuration = System.currentTimeMillis() - workoutStartTime
+        val goodFormReps = (pushUpResult.repCount * (pushUpResult.postureAnalysis?.averageFormQuality ?: 75f) / 100).toInt()
+        
+        WorkoutSummaryScreen(
+            summary = WorkoutSummary(
+                totalReps = pushUpResult.repCount,
+                averageFormQuality = pushUpResult.postureAnalysis?.averageFormQuality ?: 0f,
+                duration = workoutDuration,
+                goodFormReps = goodFormReps
+            ),
+            onStartNewWorkout = {
+                showSummary = false
+                pushUpDetector.reset()
+                voiceFeedbackManager.reset()
+                workoutStartTime = System.currentTimeMillis()
+            },
+            onBackToCamera = {
+                showSummary = false
+            }
+        )
+        return
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -121,7 +190,6 @@ private fun CameraPreviewScreen() {
         AndroidView(
             factory = { context ->
                 PreviewView(context).apply {
-                    // Set scale type to fill the view
                     scaleType = PreviewView.ScaleType.FILL_CENTER
                 }
             },
@@ -139,36 +207,70 @@ private fun CameraPreviewScreen() {
             }
         )
         
-        // Only show pose overlay if debug mode is enabled
+        // Enhanced pose overlay with form quality integration
         if (showDebugInfo) {
             currentPoseResult?.let { poseResult ->
-                // Convert PoseDetectionResult to PoseFrameResult
                 val poseFrameResult = poseResult.toPoseFrameResult(
-                    rotationDegrees = 0, // Use actual rotation if available
+                    rotationDegrees = 0,
                     isFrontCamera = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
                 )
                 
-                // Use standard PoseOverlay instead of EnhancedPoseOverlay (not yet available)
-                PoseOverlay(
-                    pose = poseResult.pose,
-                    imageWidth = poseResult.imageWidth,
-                    imageHeight = poseResult.imageHeight,
-                    isFrontCamera = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA,
-                    modifier = Modifier.fillMaxSize()
+                EnhancedPoseOverlay(
+                    poseFrameResult = poseFrameResult,
+                    modifier = Modifier.fillMaxSize(),
+                    debugMode = showDebugInfo
                 )
             }
         }
         
-        // Use standard card-based UI instead of EnhancedRepCounter (not yet available)
-        PushUpOverlay(
-            repCount = repCount,
-            onReset = { pushUpDetector.reset() },
-            modifier = Modifier.align(Alignment.TopCenter)
+        // Enhanced push-up counter with form quality
+        if (enhancedUI) {
+            EnhancedPushUpCounter(
+                repCount = pushUpResult.repCount,
+                formQuality = pushUpResult.postureAnalysis?.formQuality ?: 0f,
+                averageFormQuality = pushUpResult.postureAnalysis?.averageFormQuality ?: 0f,
+                hasGoodForm = pushUpResult.postureAnalysis?.hasGoodForm ?: false,
+                onReset = { 
+                    pushUpDetector.reset()
+                    voiceFeedbackManager.reset()
+                    workoutStartTime = System.currentTimeMillis()
+                },
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        } else {
+            // Legacy simple counter for compatibility
+            PushUpOverlay(
+                repCount = pushUpResult.repCount,
+                onReset = { 
+                    pushUpDetector.reset()
+                    voiceFeedbackManager.reset()
+                    workoutStartTime = System.currentTimeMillis()
+                },
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+        }
+        
+        // Posture feedback display
+        PostureFeedbackDisplay(
+            feedbackMessage = currentFeedbackMessage,
+            isGoodForm = pushUpResult.postureAnalysis?.hasGoodForm ?: false,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 200.dp)
         )
+        
+        // Voice settings card (toggleable)
+        if (showSettingsCard) {
+            VoiceSettingsCard(
+                isVoiceEnabled = voiceEnabled,
+                speechRate = speechRate,
+                onVoiceToggle = { settingsManager.setVoiceEnabled(it) },
+                onSpeechRateChange = { settingsManager.setSpeechRate(it) },
+                modifier = Modifier.align(Alignment.CenterStart)
+            )
+        }
         
         // Debug button
         FloatingActionButton(
-            onClick = { showDebugInfo = !showDebugInfo },
+            onClick = { settingsManager.setShowDebugInfo(!showDebugInfo) },
             modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
             containerColor = if (showDebugInfo) Color(0xFF4ECCA3) else Color(0xFF424255),
             shape = RoundedCornerShape(16.dp)
@@ -181,7 +283,7 @@ private fun CameraPreviewScreen() {
             )
         }
         
-        // Camera controls
+        // Camera controls and settings
         CameraControls(
             onCameraSwitch = { 
                 cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
@@ -190,6 +292,12 @@ private fun CameraPreviewScreen() {
                     CameraSelector.DEFAULT_BACK_CAMERA
                 }
             },
+            onSettingsToggle = { showSettingsCard = !showSettingsCard },
+            onShowSummary = { 
+                voiceFeedbackManager.announceWorkoutComplete(pushUpResult.repCount)
+                showSummary = true 
+            },
+            hasReps = pushUpResult.repCount > 0,
             modifier = Modifier.align(Alignment.BottomEnd)
         )
     }
@@ -198,11 +306,13 @@ private fun CameraPreviewScreen() {
 @Composable
 private fun CameraControls(
     onCameraSwitch: () -> Unit,
+    onSettingsToggle: () -> Unit,
+    onShowSummary: () -> Unit,
+    hasReps: Boolean,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier
-            .padding(16.dp),
+        modifier = modifier.padding(16.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.Black.copy(alpha = 0.7f)
@@ -223,6 +333,34 @@ private fun CameraControls(
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
+            }
+            
+            // Settings button
+            IconButton(
+                onClick = onSettingsToggle,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Voice settings",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            
+            // Summary button (only if there are reps)
+            if (hasReps) {
+                IconButton(
+                    onClick = onShowSummary,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Assessment,
+                        contentDescription = "Show summary",
+                        tint = Color(0xFF4ECCA3),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }
