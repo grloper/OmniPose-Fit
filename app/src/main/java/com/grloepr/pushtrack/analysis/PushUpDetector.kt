@@ -110,12 +110,12 @@ class PushUpDetector {
         val magnitude1 = sqrt(v1x * v1x + v1y * v1y)
         val magnitude2 = sqrt(v2x * v2x + v2y * v2y)
         
-        if (magnitude1 == 0.0 || magnitude2 == 0.0) return null
+        if (magnitude1 == 0.0f || magnitude2 == 0.0f) return null
         
         val cosAngle = dotProduct / (magnitude1 * magnitude2)
-        val clampedCosAngle = cosAngle.coerceIn(-1.0, 1.0)
+        val clampedCosAngle = cosAngle.coerceIn(-1.0f, 1.0f)
         
-        return Math.toDegrees(acos(clampedCosAngle))
+        return Math.toDegrees(acos(clampedCosAngle.toDouble()))
     }
     
     /**
