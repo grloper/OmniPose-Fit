@@ -22,6 +22,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.google.mlkit.vision.pose.Pose
 import com.grloepr.pushtrack.analysis.ImageAnalyzer
 import com.grloepr.pushtrack.analysis.PoseDetectionResult
+import com.grloepr.pushtrack.analysis.PushUpDetector
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
@@ -64,6 +65,9 @@ private fun CameraPreviewScreen() {
     // Push-up counter state
     var repCount by remember { mutableStateOf(0) }
     
+    // Initialize push-up detector
+    val pushUpDetector = remember { PushUpDetector() }
+    
     // Initialize pose detection components
     val poseDetectorClient = remember { 
         PoseDetectorClient().apply { initialize() }
@@ -73,10 +77,13 @@ private fun CameraPreviewScreen() {
     // State for current pose detection result
     var currentPoseResult by remember { mutableStateOf<PoseDetectionResult?>(null) }
     
-    // Collect pose results
+    // Collect pose results and process push-ups
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collectLatest { poseResult ->
             currentPoseResult = poseResult
+            // Process pose for push-up detection
+            val newRepCount = pushUpDetector.processPose(poseResult.pose)
+            repCount = newRepCount
         }
     }
     
@@ -124,7 +131,10 @@ private fun CameraPreviewScreen() {
         // Overlay UI
         PushUpOverlay(
             repCount = repCount,
-            onReset = { repCount = 0 },
+            onReset = { 
+                pushUpDetector.reset()
+                repCount = 0 
+            },
             modifier = Modifier.align(Alignment.TopCenter)
         )
         
