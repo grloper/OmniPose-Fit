@@ -32,6 +32,7 @@ import com.grloepr.pushtrack.ui.overlay.EnhancedPoseOverlay
 import com.grloepr.pushtrack.ui.overlay.PoseOverlay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 
 // Extension function to convert PoseDetectionResult to PoseFrameResult
 fun PoseDetectionResult.toPoseFrameResult(
@@ -142,13 +143,17 @@ private fun CameraPreviewScreen() {
                     PostureFeedback.SLOW_DOWN -> "Slow down"
                     PostureFeedback.KEEP_GOING -> "Keep going!"
                 }
-                
-                // Clear feedback message after delay
-                kotlinx.coroutines.delay(3000)
-                currentFeedbackMessage = null
             }
             
             pushUpResult = newResult
+        }
+    }
+    
+    // Clear feedback message after delay
+    LaunchedEffect(currentFeedbackMessage) {
+        if (currentFeedbackMessage != null) {
+            delay(3000)
+            currentFeedbackMessage = null
         }
     }
     
