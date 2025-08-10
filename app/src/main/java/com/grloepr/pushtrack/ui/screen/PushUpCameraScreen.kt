@@ -116,6 +116,7 @@ private fun CameraPreviewScreen() {
                 pose = poseResult.pose,
                 imageWidth = poseResult.imageWidth,
                 imageHeight = poseResult.imageHeight,
+                isFrontCamera = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA,
                 modifier = Modifier.fillMaxSize()
             )
         }
