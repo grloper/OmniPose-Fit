@@ -218,25 +218,28 @@ private fun transformCoordinateEnhanced(
     val imageWidth = poseFrameResult.imageWidth.toFloat()
     val imageHeight = poseFrameResult.imageHeight.toFloat()
     
+    // Apply front camera mirroring first (before any rotation/scaling)
+    val mirroredX = if (poseFrameResult.isFrontCamera) imageWidth - x else x
+    
     // Apply rotation transformation based on image rotation
     val (rotatedX, rotatedY, rotatedWidth, rotatedHeight) = when (poseFrameResult.rotationDegrees) {
         90 -> {
             val newX = imageHeight - y
-            val newY = x
+            val newY = mirroredX
             arrayOf(newX, newY, imageHeight, imageWidth)
         }
         180 -> {
-            val newX = imageWidth - x
+            val newX = imageWidth - mirroredX
             val newY = imageHeight - y
             arrayOf(newX, newY, imageWidth, imageHeight)
         }
         270 -> {
             val newX = y
-            val newY = imageWidth - x
+            val newY = imageWidth - mirroredX
             arrayOf(newX, newY, imageHeight, imageWidth)
         }
         else -> {
-            arrayOf(x, y, imageWidth, imageHeight)
+            arrayOf(mirroredX, y, imageWidth, imageHeight)
         }
     }
     
@@ -256,22 +259,6 @@ private fun transformCoordinateEnhanced(
     val offsetY = (canvasHeight - (rotatedHeight * scale)) / 2f
     scaledX += offsetX
     scaledY += offsetY
-    
-    // Apply mirroring for front camera
-    if (poseFrameResult.isFrontCamera) {
-        scaledX = canvasWidth - scaledX
-    }
-    
-    // Apply perspective correction for better alignment
-    // This slightly adjusts Y coordinate based on position to compensate for camera angle
-    val perspectiveCorrection = if (poseFrameResult.isFrontCamera) {
-        // Adjust vertical position based on how high the landmark is 
-        // (upper body landmarks need more correction)
-        val verticalPosition = scaledY / canvasHeight
-        if (verticalPosition < 0.4f) -5f else 0f // Adjust upper body more
-    } else 0f
-    
-    scaledY += perspectiveCorrection
     
     return Offset(scaledX, scaledY)
 }

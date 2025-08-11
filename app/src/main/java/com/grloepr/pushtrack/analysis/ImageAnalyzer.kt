@@ -14,12 +14,13 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 /**
- * Data class to hold pose detection results with image dimensions
+ * Data class to hold pose detection results with image dimensions and rotation
  */
 data class PoseDetectionResult(
     val pose: Pose,
     val imageWidth: Int,
-    val imageHeight: Int
+    val imageHeight: Int,
+    val rotationDegrees: Int
 )
 
 /**
@@ -59,9 +60,10 @@ class ImageAnalyzer(
                 imageProxy.imageInfo.rotationDegrees
             )
             
-            // Store image dimensions for coordinate transformation
+            // Store image dimensions and rotation for coordinate transformation
             val imageWidth = inputImage.width
             val imageHeight = inputImage.height
+            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             
             // Process pose detection on background thread
             poseDetectorClient.detectPose(
@@ -69,7 +71,7 @@ class ImageAnalyzer(
                 onSuccess = { pose ->
                     // Emit pose results with image dimensions to collectors on background thread
                     analysisScope.launch {
-                        _poseResults.tryEmit(PoseDetectionResult(pose, imageWidth, imageHeight))
+                        _poseResults.tryEmit(PoseDetectionResult(pose, imageWidth, imageHeight, rotationDegrees))
                         isProcessing = false
                         imageProxy.close()
                     }

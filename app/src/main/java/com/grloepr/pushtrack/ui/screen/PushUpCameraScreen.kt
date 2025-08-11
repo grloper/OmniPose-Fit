@@ -36,14 +36,13 @@ import kotlinx.coroutines.delay
 
 // Extension function to convert PoseDetectionResult to PoseFrameResult
 fun PoseDetectionResult.toPoseFrameResult(
-    rotationDegrees: Int = 0,
     isFrontCamera: Boolean = false
 ): PoseFrameResult {
     return PoseFrameResult(
         pose = this.pose,
         imageWidth = this.imageWidth,
         imageHeight = this.imageHeight,
-        rotationDegrees = rotationDegrees,
+        rotationDegrees = this.rotationDegrees,
         isFrontCamera = isFrontCamera
     )
 }
@@ -216,7 +215,6 @@ private fun CameraPreviewScreen() {
         if (showDebugInfo) {
             currentPoseResult?.let { poseResult ->
                 val poseFrameResult = poseResult.toPoseFrameResult(
-                    rotationDegrees = 0,
                     isFrontCamera = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
                 )
                 
