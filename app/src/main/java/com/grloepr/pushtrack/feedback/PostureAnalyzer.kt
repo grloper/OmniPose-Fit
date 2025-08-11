@@ -220,7 +220,7 @@ class PostureAnalyzer {
         shoulder: PoseLandmark?,
         elbow: PoseLandmark?,
         wrist: PoseLandmark?
-    ): Double? {
+    ): Float? {  // Changed return type from Double? to Float?
         if (shoulder == null || elbow == null || wrist == null) return null
         
         // Check confidence
@@ -252,7 +252,8 @@ class PostureAnalyzer {
         val cosAngle = dotProduct / (magnitude1 * magnitude2)
         val clampedCosAngle = cosAngle.coerceIn(-1.0f, 1.0f)
         
-        return Math.toDegrees(acos(clampedCosAngle.toDouble()))
+        // Convert the Double result to Float before returning
+        return Math.toDegrees(acos(clampedCosAngle.toDouble())).toFloat()
     }
     
     /**
