@@ -7,6 +7,8 @@ import io.mockk.mockk
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import kotlin.math.cos
+import kotlin.math.sin
 
 class PushUpDetectorTest {
     
@@ -111,6 +113,50 @@ class PushUpDetectorTest {
         
         // Should not crash and should not count reps
         assertEquals(0, repCount)
+    }
+    
+    @Test
+    fun `processPoseWithAnalysis should return enhanced result`() {
+        val pose = createMockPoseWithArmAngle(80.0) // Down position
+        
+        val result = pushUpDetector.processPoseWithAnalysis(pose)
+        
+        assertNotNull(result)
+        assertEquals(0, result.repCount) // No reps yet
+        assertEquals(PushUpState.DOWN_POSITION, result.currentState)
+        assertNotNull(result.postureAnalysis)
+    }
+    
+    @Test
+    fun `should count rep with enhanced analysis`() {
+        // First, go to down position
+        val downPose = createMockPoseWithArmAngle(80.0)
+        var result = pushUpDetector.processPoseWithAnalysis(downPose)
+        assertEquals(PushUpState.DOWN_POSITION, result.currentState)
+        
+        // Then, go to up position - should count a rep
+        val upPose = createMockPoseWithArmAngle(170.0)
+        result = pushUpDetector.processPoseWithAnalysis(upPose)
+        
+        assertEquals(1, result.repCount)
+        assertEquals(PushUpState.UP_POSITION, result.currentState)
+        assertNotNull(result.postureAnalysis)
+    }
+    
+    @Test
+    fun `reset should clear enhanced state`() {
+        // Process some poses to build state
+        val downPose = createMockPoseWithArmAngle(80.0)
+        val upPose = createMockPoseWithArmAngle(170.0)
+        
+        pushUpDetector.processPoseWithAnalysis(downPose)
+        pushUpDetector.processPoseWithAnalysis(upPose)
+        
+        pushUpDetector.reset()
+        
+        val result = pushUpDetector.processPoseWithAnalysis(downPose)
+        assertEquals(0, result.repCount)
+        assertEquals(PushUpState.DOWN_POSITION, result.currentState)
     }
     
     private fun createMockPoseWithArmAngle(targetAngle: Double): Pose {
