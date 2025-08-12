@@ -33,6 +33,19 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
     private var hangingTorsoBaseline: Float? = null
     private var calibrationFrames = 0
     
+    // VIEW MODE detection (front vs back)
+    private enum class ViewMode { FRONT, BACK }
+    private var viewMode: ViewMode = ViewMode.FRONT
+    private var lastViewModeChangeTs = 0L
+    private val viewModeMinHoldMs = 1500L
+
+    // Back-view specific baselines
+    private var hangingShoulderWristDist: Float? = null
+    private var hangingShoulderCenterY: Float? = null
+
+    // Added thresholds tuned for back view
+    private val backWristApproachRatio = 0.72f      // wrist-to-shoulder distance ratio when pulled up
+    private val backShoulderLiftThreshold = 0.06f   // normalized upward movement of shoulder center
     
     /**
      * Calculate primary signal: torso vertical position for pull-up detection
@@ -40,17 +53,44 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
     override fun calculatePrimaryAngle(pose: Pose): Float? {
         val normalizedPose = KeypointNormalizer.normalizePose(pose) ?: return null
         lastNormalizedPose = normalizedPose
-        
-        // Calculate torso center vertical position
+
+        // Detect current viewing mode
+        detectViewMode(normalizedPose)
+
+        // Torso vertical (used as primary numeric signal)
         val torsoPosition = calculateTorsoVerticalPosition(normalizedPose) ?: return null
-        
-        // Auto-calibrate hanging position
-        calibrateHangingPosition(normalizedPose, torsoPosition)
-        
-        // Return smoothed relative torso position
+        calibrateHangingPosition(normalizedPose, torsoPosition) // now also sets back-view baselines
+
         return torsoPositionSmoother.addSample(torsoPosition)
     }
-    
+
+    // Detect view mode by facial landmark confidence vs torso landmarks
+    private fun detectViewMode(norm: KeypointNormalizer.NormalizedPose) {
+        val faceIds = listOf(
+            PoseLandmark.NOSE,
+            PoseLandmark.LEFT_EYE, PoseLandmark.RIGHT_EYE,
+            PoseLandmark.LEFT_EAR, PoseLandmark.RIGHT_EAR
+        )
+        val torsoIds = listOf(
+            PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+            PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP
+        )
+        val faceConf = faceIds.mapNotNull { norm.getLandmark(it)?.confidence }.ifEmpty { listOf(0f) }.average()
+        val torsoConf = torsoIds.mapNotNull { norm.getLandmark(it)?.confidence }.ifEmpty { listOf(0f) }.average()
+        val now = System.currentTimeMillis()
+        val proposed = if (faceConf < 0.35 && torsoConf > 0.55) ViewMode.BACK else ViewMode.FRONT
+        if (proposed != viewMode && now - lastViewModeChangeTs > viewModeMinHoldMs) {
+            viewMode = proposed
+            lastViewModeChangeTs = now
+            // Reset calibration for new orientation
+            hangingTorsoBaseline = null
+            barLevelEstimate = null
+            hangingShoulderWristDist = null
+            hangingShoulderCenterY = null
+            calibrationFrames = 0
+        }
+    }
+
     /**
      * Calculate normalized torso vertical position
      */
@@ -78,20 +118,31 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
         torsoPosition: Float
     ) {
         val avgElbowAngle = calculateAverageElbowAngle(normalizedPose)
-        
-        // Look for stable hanging position (extended arms) - Faster calibration
-        if (avgElbowAngle != null && avgElbowAngle > armExtensionThreshold) {
+        val wrists = listOfNotNull(
+            normalizedPose.getLandmark(PoseLandmark.LEFT_WRIST),
+            normalizedPose.getLandmark(PoseLandmark.RIGHT_WRIST)
+        )
+        val shoulders = listOfNotNull(
+            normalizedPose.getLandmark(PoseLandmark.LEFT_SHOULDER),
+            normalizedPose.getLandmark(PoseLandmark.RIGHT_SHOULDER)
+        )
+        if (avgElbowAngle != null && avgElbowAngle > armExtensionThreshold && shoulders.size == 2 && wrists.size >= 1) {
             calibrationFrames++
-            if (calibrationFrames >= 8) { // Reduced from 15 frames
+            if (calibrationFrames >= 8) {
                 hangingTorsoBaseline = torsoPosition
-                
-                // Estimate bar level from hand positions
-                estimateBarLevel(normalizedPose)
+                // Front view: estimate bar from wrists (existing)
+                if (viewMode == ViewMode.FRONT) {
+                    estimateBarLevel(normalizedPose)
+                } else {
+                    // Back view: store wrist-shoulder vertical distance baseline
+                    val shoulderCenterY = (shoulders[0].y + shoulders[1].y) / 2f
+                    val avgWristY = wrists.map { it.y }.average().toFloat()
+                    hangingShoulderWristDist = (avgWristY - shoulderCenterY).coerceAtLeast(0.01f)
+                    hangingShoulderCenterY = shoulderCenterY
+                }
                 calibrationFrames = 0
             }
-        } else {
-            calibrationFrames = 0
-        }
+        } else calibrationFrames = 0
     }
     
     /**
@@ -115,21 +166,42 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
      * Determine pull-up phase using torso movement and chin position
      */
     override fun determinePhase(pose: Pose, primaryAngle: Float?): ExercisePhase {
-        val normalizedPose = lastNormalizedPose
-        if (normalizedPose == null || primaryAngle == null) {
-            return ExercisePhase.TRANSITIONING
-        }
-        
-        // Multi-signal analysis for robust detection
+        val norm = lastNormalizedPose ?: return ExercisePhase.TRANSITIONING
+        if (primaryAngle == null) return ExercisePhase.TRANSITIONING
+
         val torsoPhase = analyzeTorsoMovement(primaryAngle)
-        val chinPhase = analyzeChinPosition(normalizedPose)
-        val elbowPhase = analyzeElbowAngles(normalizedPose)
-        
-        // Combine signals with prioritization
-        val combinedPhase = combinePhaseSignals(torsoPhase, chinPhase, elbowPhase)
-        
-        // Use debounced state machine
-        return stateMachine.updateState(combinedPhase)
+        val elbowPhase = analyzeElbowAngles(norm)
+
+        val auxPhase =
+            if (viewMode == ViewMode.FRONT) analyzeChinPosition(norm)
+            else analyzeBackViewShoulderWrist(norm) // back-view alternative to chin/bar
+
+        val combined = combinePhaseSignals(torsoPhase, auxPhase, elbowPhase)
+        return stateMachine.updateState(combined)
+    }
+
+    // Back view auxiliary phase using wrist-to-shoulder distance and shoulder elevation
+    private fun analyzeBackViewShoulderWrist(norm: KeypointNormalizer.NormalizedPose): ExercisePhase? {
+        val leftSh = norm.getLandmark(PoseLandmark.LEFT_SHOULDER)
+        val rightSh = norm.getLandmark(PoseLandmark.RIGHT_SHOULDER)
+        val wrists = listOfNotNull(
+            norm.getLandmark(PoseLandmark.LEFT_WRIST),
+            norm.getLandmark(PoseLandmark.RIGHT_WRIST)
+        )
+        if (leftSh == null || rightSh == null || wrists.isEmpty()) return null
+        val shoulderCenterY = (leftSh.y + rightSh.y) / 2f
+        val avgWristY = wrists.map { it.y }.average().toFloat()
+        val baselineDist = hangingShoulderWristDist ?: return null
+        val distNow = (avgWristY - shoulderCenterY).coerceAtLeast(0.001f)
+        val ratio = distNow / baselineDist // < 1 when pulling up
+        val shoulderLift = if (hangingShoulderCenterY != null)
+            (hangingShoulderCenterY!! - shoulderCenterY) else 0f // positive when shoulders rise
+
+        return when {
+            ratio < backWristApproachRatio && shoulderLift > backShoulderLiftThreshold -> ExercisePhase.UP
+            ratio > 0.95f -> ExercisePhase.DOWN
+            else -> ExercisePhase.TRANSITIONING
+        }
     }
     
     /**
@@ -247,87 +319,58 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
      * Enhanced confidence calculation based on multiple signal quality
      */
     override fun calculateConfidence(pose: Pose, primaryAngle: Float?): Float {
-        val normalizedPose = lastNormalizedPose
-        if (normalizedPose == null || primaryAngle == null) {
-            return 0f
-        }
-        
-        var confidence = 0f
+        val norm = lastNormalizedPose
+        if (norm == null || primaryAngle == null) return 0f
+
+        var conf = 0f
         var factors = 0
-        
-        // Base confidence from pose normalization quality
-        confidence += normalizedPose.confidence
-        factors++
-        
-        // Calibration bonus
-        if (hangingTorsoBaseline != null) {
-            confidence += 0.3f
-            factors++
+
+        conf += norm.confidence; factors++
+
+        if (hangingTorsoBaseline != null) { conf += 0.25f; factors++ }
+
+        if (viewMode == ViewMode.FRONT && barLevelEstimate != null) {
+            conf += 0.2f; factors++
         }
-        
-        // Bar level estimation bonus
-        if (barLevelEstimate != null) {
-            confidence += 0.2f
-            factors++
+        if (viewMode == ViewMode.BACK && hangingShoulderWristDist != null) {
+            conf += 0.2f; factors++
         }
-        
-        // Key landmark visibility for pull-ups
-        val requiredLandmarks = listOf(
+
+        val required = mutableListOf(
             PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
             PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
-            PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST,
-            PoseLandmark.NOSE
+            PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST
         )
-        
-        if (KeypointNormalizer.hasSufficientQuality(normalizedPose, requiredLandmarks)) {
-            confidence += 0.3f
-            factors++
+        if (viewMode == ViewMode.FRONT) required += PoseLandmark.NOSE
+        if (KeypointNormalizer.hasSufficientQuality(norm, required)) {
+            conf += 0.2f; factors++
         }
-        
-        // Multi-signal consistency bonus
+
+        // Multi-signal consistency
         val torsoPhase = analyzeTorsoMovement(primaryAngle)
-        val chinPhase = analyzeChinPosition(normalizedPose)
-        val elbowPhase = analyzeElbowAngles(normalizedPose)
-        
-        val definiteSignals = listOfNotNull(torsoPhase, chinPhase, elbowPhase)
-            .count { it != ExercisePhase.TRANSITIONING }
-        
-        if (definiteSignals >= 2) {
-            confidence += 0.2f
-            factors++
-        }
-        
-        val finalConfidence = if (factors > 0) (confidence / factors).coerceIn(0f, 1f) else 0f
-        
-        // Update rep counter
-        val currentPhase = stateMachine.getCurrentState()
-        repCounter.processPhase(currentPhase, finalConfidence)
-        
-        return finalConfidence
+        val auxPhase = if (viewMode == ViewMode.FRONT) analyzeChinPosition(norm) else analyzeBackViewShoulderWrist(norm)
+        val elbowPhase = analyzeElbowAngles(norm)
+        val definite = listOfNotNull(torsoPhase, auxPhase, elbowPhase).count { it != ExercisePhase.TRANSITIONING }
+        if (definite >= 2) { conf += 0.15f; factors++ }
+
+        val final = if (factors > 0) (conf / factors).coerceIn(0f, 1f) else 0f
+
+        repCounter.processPhase(stateMachine.getCurrentState(), final)
+        return final
     }
     
     /**
      * Get detection method description
      */
     override fun getDetectionMethod(): String {
-        val methods = mutableListOf<String>()
-        
-        if (hangingTorsoBaseline != null) methods.add("torso_movement")
-        if (barLevelEstimate != null) methods.add("chin_to_bar")
-        if (lastPrimaryAngle != null) methods.add("elbow_angles")
-        
-        val baseMethod = if (methods.isNotEmpty()) {
-            "multi_signal(${methods.joinToString(",")})"
-        } else {
-            "basic_elbow"
-        }
-        
-        val uncertainReps = repCounter.getUncertainReps()
-        return if (uncertainReps > 0) {
-            "$baseMethod+uncertain_reps"
-        } else {
-            baseMethod
-        }
+        val modes = mutableListOf<String>()
+        modes += "view=${viewMode.name.lowercase()}"
+        if (hangingTorsoBaseline != null) modes += "torso"
+        if (viewMode == ViewMode.FRONT && barLevelEstimate != null) modes += "chin_bar"
+        if (viewMode == ViewMode.BACK && hangingShoulderWristDist != null) modes += "shoulder_wrist"
+        if (lastPrimaryAngle != null) modes += "torso_pos_primary"
+        if (repCounter.getUncertainReps() > 0) modes += "uncertain_reps"
+        return modes.joinToString("+")
     }
     
     /**
@@ -364,5 +407,8 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
         barLevelEstimate = null
         hangingTorsoBaseline = null
         calibrationFrames = 0
+        viewMode = ViewMode.FRONT
+        hangingShoulderWristDist = null
+        hangingShoulderCenterY = null
     }
 }

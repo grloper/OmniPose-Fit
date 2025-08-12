@@ -813,15 +813,17 @@ private fun evaluateVisibility(pose: Pose, exerciseType: ExerciseType): Pair<Boo
             val lw = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
             val rw = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
             val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
-            
-            if (lw == null || rw == null) {
-                return false to "Show both hands clearly."
+            val shouldersOk =
+                (pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)?.inFrameLikelihood ?: 0f) > 0.55f &&
+                (pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)?.inFrameLikelihood ?: 0f) > 0.55f
+            if (lw == null || rw == null || !shouldersOk) {
+                return false to "Show both hands and shoulders."
             }
-            
-            if (nose != null) {
+            val noseConf = nose?.inFrameLikelihood ?: 0f
+            if (noseConf >= 0.55f && nose != null) { // ensure non-null for smart cast
                 val avgWristY = (lw.position.y + rw.position.y) / 2f
                 if (avgWristY > nose.position.y) {
-                    return false to "Hang from the bar. Hands should be above your head."
+                    return false to "Raise hands higher for pull ups."
                 }
             }
         }
