@@ -115,6 +115,7 @@ private fun CameraPreviewScreen() {
         workoutStartTime = System.currentTimeMillis()
         exerciseState = ExerciseState()
         pushUpResult = PushUpResult(0, PushUpState.UNKNOWN, null)
+        currentFeedbackMessage = null
     }
     
     // Initialize exercise detector with proper lifecycle management
@@ -145,20 +146,42 @@ private fun CameraPreviewScreen() {
         )
     }
     
-    // Collect pose results and process exercises
-    LaunchedEffect(imageAnalyzer, currentExerciseType, exerciseDetector) {
+    // Collect pose results for processing
+    LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
-            
+        }
+    }
+    
+    // Process poses with current exercise detector
+    LaunchedEffect(currentPoseResult, exerciseDetector) {
+        currentPoseResult?.let { poseResult ->
             // Process pose with current modular detector
             exerciseDetector.processPose(poseResult.pose)
             
-            // Update exercise state
-            exerciseState = exerciseDetector.state.value
+            // Smart mode: Auto-detect exercise type based on pose patterns
+            if (smartModeEnabled) {
+                val detectedType = detectExerciseType(poseResult.pose)
+                if (detectedType != currentExerciseType) {
+                    currentExerciseType = detectedType
+                    // Trigger detector recreation and reset other components
+                    resetTrigger++
+                    legacyPushUpDetector.reset()
+                    voiceFeedbackManager.reset()
+                    workoutStartTime = System.currentTimeMillis()
+                }
+            }
+        }
+    }
+    
+    // Collect exercise state from current detector
+    LaunchedEffect(exerciseDetector) {
+        exerciseDetector.state.collect { newState ->
+            exerciseState = newState
             
             // For compatibility, also process with legacy push-up detector if needed
-            if (currentExerciseType == ExerciseType.PUSH_UP) {
-                val newResult = legacyPushUpDetector.processPoseWithAnalysis(poseResult.pose)
+            if (currentExerciseType == ExerciseType.PUSH_UP && currentPoseResult != null) {
+                val newResult = legacyPushUpDetector.processPoseWithAnalysis(currentPoseResult!!.pose)
                 
                 // Announce new rep count
                 if (newResult.repCount > pushUpResult.repCount) {
@@ -183,24 +206,11 @@ private fun CameraPreviewScreen() {
                 pushUpResult = newResult
             } else {
                 // For other exercises, announce rep count when it increases
-                if (exerciseState.count > pushUpResult.repCount) {
-                    voiceFeedbackManager.announceRepCount(exerciseState.count)
+                if (newState.count > pushUpResult.repCount) {
+                    voiceFeedbackManager.announceRepCount(newState.count)
                 }
                 // Update legacy result for UI compatibility
-                pushUpResult = pushUpResult.copy(repCount = exerciseState.count)
-            }
-            
-            // Smart mode: Auto-detect exercise type based on pose patterns
-            if (smartModeEnabled) {
-                val detectedType = detectExerciseType(poseResult.pose)
-                if (detectedType != currentExerciseType) {
-                    currentExerciseType = detectedType
-                    // Reset legacy detector and voice feedback only
-                    // The exerciseDetector will be recreated by remember(currentExerciseType)
-                    legacyPushUpDetector.reset()
-                    voiceFeedbackManager.reset()
-                    workoutStartTime = System.currentTimeMillis()
-                }
+                pushUpResult = pushUpResult.copy(repCount = newState.count)
             }
         }
     }
@@ -318,11 +328,15 @@ private fun CameraPreviewScreen() {
                 smartModeEnabled = smartModeEnabled,
                 onExerciseSelected = { exerciseType ->
                     currentExerciseType = exerciseType
-                    // Reset only legacy detector and voice feedback
-                    // The exerciseDetector will be recreated by remember(currentExerciseType)
+                    // Trigger detector recreation with resetTrigger
+                    resetTrigger++
+                    // Reset legacy detector and voice feedback
                     legacyPushUpDetector.reset()
                     voiceFeedbackManager.reset()
                     workoutStartTime = System.currentTimeMillis()
+                    // Reset exercise state
+                    exerciseState = ExerciseState()
+                    pushUpResult = PushUpResult(0, PushUpState.UNKNOWN, null)
                 },
                 onSmartModeToggle = { smartModeEnabled = it },
                 modifier = Modifier.align(Alignment.CenterEnd)
@@ -371,8 +385,22 @@ private fun CameraPreviewScreen() {
                     CameraSelector.DEFAULT_BACK_CAMERA
                 }
             },
-            onSettingsToggle = { showSettingsCard = !showSettingsCard },
-            onExerciseSelectorToggle = { showExerciseSelector = !showExerciseSelector },
+            onSettingsToggle = { 
+                val newShowSettings = !showSettingsCard
+                showSettingsCard = newShowSettings
+                // Close exercise selector if opening settings to prevent overlap
+                if (newShowSettings) {
+                    showExerciseSelector = false
+                }
+            },
+            onExerciseSelectorToggle = { 
+                val newShowSelector = !showExerciseSelector
+                showExerciseSelector = newShowSelector
+                // Close settings if opening exercise selector to prevent overlap
+                if (newShowSelector) {
+                    showSettingsCard = false
+                }
+            },
             onShowSummary = { 
                 voiceFeedbackManager.announceWorkoutComplete(pushUpResult.repCount)
                 showSummary = true 
