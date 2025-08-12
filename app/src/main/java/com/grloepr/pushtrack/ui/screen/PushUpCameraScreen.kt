@@ -22,6 +22,7 @@ import com.google.mlkit.vision.pose.Pose
 import com.grloepr.pushtrack.analysis.*
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
+import com.grloepr.pushtrack.detection.*
 import com.grloepr.pushtrack.feedback.*
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
 import com.grloepr.pushtrack.permission.CameraPermissionRequest
@@ -50,7 +51,7 @@ fun PoseDetectionResult.toPoseFrameResult(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PushUpCameraScreen() {
+fun ExerciseCameraScreen() {
     var permissionGranted by remember { mutableStateOf(false) }
     var permissionDenied by remember { mutableStateOf(false) }
     
@@ -83,11 +84,17 @@ private fun CameraPreviewScreen() {
     // Camera selector state (front/back camera)
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
     
-    // Push-up counter state
+    // Exercise detection state
+    var currentExerciseType by remember { mutableStateOf(ExerciseType.PUSH_UP) }
+    var smartModeEnabled by remember { mutableStateOf(false) }
+    var exerciseState by remember { mutableStateOf(ExerciseState()) }
+    
+    // Legacy push-up state for compatibility
     var pushUpResult by remember { mutableStateOf(PushUpResult(0, PushUpState.UNKNOWN, null)) }
     
     // UI state
     var showSettingsCard by remember { mutableStateOf(false) }
+    var showExerciseSelector by remember { mutableStateOf(false) }
     var showSummary by remember { mutableStateOf(false) }
     var workoutStartTime by remember { mutableStateOf(System.currentTimeMillis()) }
     var currentFeedbackMessage by remember { mutableStateOf<String?>(null) }
@@ -98,8 +105,13 @@ private fun CameraPreviewScreen() {
     val showDebugInfo by settingsManager.showDebugInfo.collectAsState()
     val enhancedUI by settingsManager.enhancedUI.collectAsState()
     
-    // Initialize push-up detector
-    val pushUpDetector = remember { PushUpDetector() }
+    // Initialize exercise detector based on current type
+    val exerciseDetector = remember(currentExerciseType) { 
+        ExerciseDetectorFactory.createDetector(currentExerciseType)
+    }
+    
+    // Initialize legacy push-up detector for compatibility  
+    val legacyPushUpDetector = remember { PushUpDetector() }
     
     // Initialize pose detection components
     val poseDetectorClient = remember { 
@@ -118,34 +130,55 @@ private fun CameraPreviewScreen() {
         )
     }
     
-    // Collect pose results and process push-ups
-    LaunchedEffect(imageAnalyzer) {
+    // Collect pose results and process exercises
+    LaunchedEffect(imageAnalyzer, currentExerciseType) {
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
             
-            // Process pose for push-up detection with enhanced analysis
-            val newResult = pushUpDetector.processPoseWithAnalysis(poseResult.pose)
+            // Process pose with modular detector
+            exerciseDetector.processPose(poseResult.pose)
             
-            // Announce new rep count
-            if (newResult.repCount > pushUpResult.repCount) {
-                voiceFeedbackManager.announceRepCount(newResult.repCount)
-            }
+            // Update exercise state
+            exerciseState = exerciseDetector.state.value
             
-            // Handle posture feedback
-            newResult.postureAnalysis?.feedback?.let { feedback ->
-                voiceFeedbackManager.announcePostureFeedback(feedback)
-                currentFeedbackMessage = when (feedback) {
-                    PostureFeedback.GOOD_FORM -> "Good form!"
-                    PostureFeedback.LOWER_BODY -> "Lower your body more"
-                    PostureFeedback.RAISE_BODY -> "Push up higher"
-                    PostureFeedback.STRAIGHTEN_BACK -> "Keep your back straight"
-                    PostureFeedback.ALIGN_HANDS -> "Align your hands"
-                    PostureFeedback.SLOW_DOWN -> "Slow down"
-                    PostureFeedback.KEEP_GOING -> "Keep going!"
+            // For compatibility, also process with legacy push-up detector if needed
+            if (currentExerciseType == ExerciseType.PUSH_UP) {
+                val newResult = legacyPushUpDetector.processPoseWithAnalysis(poseResult.pose)
+                
+                // Announce new rep count
+                if (newResult.repCount > pushUpResult.repCount) {
+                    voiceFeedbackManager.announceRepCount(newResult.repCount)
                 }
+                
+                // Handle posture feedback
+                newResult.postureAnalysis?.feedback?.let { feedback ->
+                    voiceFeedbackManager.announcePostureFeedback(feedback)
+                    currentFeedbackMessage = when (feedback) {
+                        PostureFeedback.GOOD_FORM -> "Good form!"
+                        PostureFeedback.LOWER_BODY -> "Lower your body more"
+                        PostureFeedback.RAISE_BODY -> "Push up higher"
+                        PostureFeedback.STRAIGHTEN_BACK -> "Keep your back straight"
+                        PostureFeedback.ALIGN_HANDS -> "Align your hands"
+                        PostureFeedback.SLOW_DOWN -> "Slow down"
+                        PostureFeedback.KEEP_GOING -> "Keep going!"
+                    }
+                }
+                
+                pushUpResult = newResult
+            } else {
+                // For other exercises, announce rep count when it increases
+                if (exerciseState.count > pushUpResult.repCount) {
+                    voiceFeedbackManager.announceRepCount(exerciseState.count)
+                }
+                // Update legacy result for UI compatibility
+                pushUpResult = pushUpResult.copy(repCount = exerciseState.count)
             }
             
-            pushUpResult = newResult
+            // Smart mode: Auto-detect exercise type based on pose patterns
+            if (smartModeEnabled) {
+                // TODO: Implement smart auto-detection logic
+                // This would analyze pose patterns to automatically switch exercise types
+            }
         }
     }
     
@@ -158,7 +191,7 @@ private fun CameraPreviewScreen() {
     }
     
     // Clean up when screen is disposed
-    DisposableEffect(poseDetectorClient, voiceFeedbackManager) {
+    DisposableEffect(poseDetectorClient, voiceFeedbackManager, exerciseDetector) {
         onDispose {
             poseDetectorClient.close()
             voiceFeedbackManager.shutdown()
@@ -179,7 +212,8 @@ private fun CameraPreviewScreen() {
             ),
             onStartNewWorkout = {
                 showSummary = false
-                pushUpDetector.reset()
+                exerciseDetector.reset()
+                legacyPushUpDetector.reset()
                 voiceFeedbackManager.reset()
                 workoutStartTime = System.currentTimeMillis()
             },
@@ -228,15 +262,17 @@ private fun CameraPreviewScreen() {
             }
         }
         
-        // Enhanced push-up counter with form quality
+        // Enhanced exercise counter with form quality
         if (enhancedUI) {
-            EnhancedPushUpCounter(
+            EnhancedExerciseCounter(
+                exerciseType = currentExerciseType,
                 repCount = pushUpResult.repCount,
                 formQuality = pushUpResult.postureAnalysis?.formQuality ?: 0f,
                 averageFormQuality = pushUpResult.postureAnalysis?.averageFormQuality ?: 0f,
                 hasGoodForm = pushUpResult.postureAnalysis?.hasGoodForm ?: false,
                 onReset = { 
-                    pushUpDetector.reset()
+                    exerciseDetector.reset()
+                    legacyPushUpDetector.reset()
                     voiceFeedbackManager.reset()
                     workoutStartTime = System.currentTimeMillis()
                 },
@@ -244,10 +280,12 @@ private fun CameraPreviewScreen() {
             )
         } else {
             // Legacy simple counter for compatibility
-            PushUpOverlay(
+            ExerciseOverlay(
+                exerciseType = currentExerciseType,
                 repCount = pushUpResult.repCount,
                 onReset = { 
-                    pushUpDetector.reset()
+                    exerciseDetector.reset()
+                    legacyPushUpDetector.reset()
                     voiceFeedbackManager.reset()
                     workoutStartTime = System.currentTimeMillis()
                 },
@@ -261,6 +299,24 @@ private fun CameraPreviewScreen() {
             isGoodForm = pushUpResult.postureAnalysis?.hasGoodForm ?: false,
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 200.dp)
         )
+        
+        // Exercise selector card (toggleable)
+        if (showExerciseSelector) {
+            ExerciseSelectorCard(
+                currentExerciseType = currentExerciseType,
+                smartModeEnabled = smartModeEnabled,
+                onExerciseSelected = { exerciseType ->
+                    currentExerciseType = exerciseType
+                    // Reset detectors when switching exercise type
+                    exerciseDetector.reset()
+                    legacyPushUpDetector.reset()
+                    voiceFeedbackManager.reset()
+                    workoutStartTime = System.currentTimeMillis()
+                },
+                onSmartModeToggle = { smartModeEnabled = it },
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
+        }
         
         // Voice settings card (toggleable)
         if (showSettingsCard) {
@@ -298,6 +354,7 @@ private fun CameraPreviewScreen() {
                 }
             },
             onSettingsToggle = { showSettingsCard = !showSettingsCard },
+            onExerciseSelectorToggle = { showExerciseSelector = !showExerciseSelector },
             onShowSummary = { 
                 voiceFeedbackManager.announceWorkoutComplete(pushUpResult.repCount)
                 showSummary = true 
@@ -312,6 +369,7 @@ private fun CameraPreviewScreen() {
 private fun CameraControls(
     onCameraSwitch: () -> Unit,
     onSettingsToggle: () -> Unit,
+    onExerciseSelectorToggle: () -> Unit,
     onShowSummary: () -> Unit,
     hasReps: Boolean,
     modifier: Modifier = Modifier
@@ -335,6 +393,19 @@ private fun CameraControls(
                 Icon(
                     imageVector = Icons.Default.Cameraswitch,
                     contentDescription = "Switch camera",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            
+            // Exercise selector button
+            IconButton(
+                onClick = onExerciseSelectorToggle,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FitnessCenter,
+                    contentDescription = "Select exercise type",
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
@@ -372,10 +443,11 @@ private fun CameraControls(
 }
 
 /**
- * Overlay UI for displaying push-up count and reset button
+ * Overlay UI for displaying exercise count and reset button
  */
 @Composable
-private fun PushUpOverlay(
+private fun ExerciseOverlay(
+    exerciseType: ExerciseType,
     repCount: Int,
     onReset: () -> Unit,
     modifier: Modifier = Modifier
@@ -393,7 +465,7 @@ private fun PushUpOverlay(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Push-Up Counter",
+                text = "${ExerciseDetectorFactory.getDisplayName(exerciseType)} Counter",
                 color = Color.White,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold

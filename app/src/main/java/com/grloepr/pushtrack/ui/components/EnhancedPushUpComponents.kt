@@ -3,7 +3,9 @@ package com.grloepr.pushtrack.ui.components
 import androidx.compose.animation.core.*
 import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,13 +24,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.grloepr.pushtrack.detection.ExerciseType
+import com.grloepr.pushtrack.detection.ExerciseDetectorFactory
 import kotlinx.coroutines.delay
 
 /**
- * Enhanced push-up counter with animations and form quality indicator
+ * Enhanced exercise counter with animations and form quality indicator (supports any exercise type)
  */
 @Composable
-fun EnhancedPushUpCounter(
+fun EnhancedExerciseCounter(
+    exerciseType: ExerciseType,
     repCount: Int,
     formQuality: Float, // 0-100
     averageFormQuality: Float,
@@ -77,13 +82,24 @@ fun EnhancedPushUpCounter(
             modifier = Modifier.padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App title
-            Text(
-                text = "PushTrack",
-                color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
+            // Exercise type indicator
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = getExerciseIcon(exerciseType),
+                    contentDescription = null,
+                    tint = Color(0xFF4ECCA3),
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = ExerciseDetectorFactory.getDisplayName(exerciseType),
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             
             Spacer(modifier = Modifier.height(16.dp))
             
@@ -142,6 +158,17 @@ fun EnhancedPushUpCounter(
                 }
             }
         }
+    }
+}
+
+/**
+ * Get appropriate icon for exercise type
+ */
+private fun getExerciseIcon(exerciseType: ExerciseType): ImageVector {
+    return when (exerciseType) {
+        ExerciseType.PUSH_UP -> Icons.Default.FitnessCenter
+        ExerciseType.PULL_UP -> Icons.Default.Accessibility
+        ExerciseType.SQUAT -> Icons.Default.DirectionsRun
     }
 }
 
@@ -366,6 +393,184 @@ fun PostureFeedbackDisplay(
                         fontWeight = FontWeight.Medium
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Exercise selector card with smart mode toggle
+ */
+@Composable
+fun ExerciseSelectorCard(
+    currentExerciseType: ExerciseType,
+    smartModeEnabled: Boolean,
+    onExerciseSelected: (ExerciseType) -> Unit,
+    onSmartModeToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.padding(16.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Black.copy(alpha = 0.8f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // Title
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FitnessCenter,
+                    contentDescription = null,
+                    tint = Color(0xFF4ECCA3),
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "Exercise Type",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Smart mode toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "Smart mode",
+                        tint = if (smartModeEnabled) Color(0xFF4ECCA3) else Color.Gray,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Smart Mode",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                
+                Switch(
+                    checked = smartModeEnabled,
+                    onCheckedChange = onSmartModeToggle,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFF4ECCA3),
+                        checkedTrackColor = Color(0xFF4ECCA3).copy(alpha = 0.5f)
+                    )
+                )
+            }
+            
+            if (smartModeEnabled) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Auto-detects exercise type",
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Exercise type selection
+            Text(
+                text = "Manual Selection",
+                color = if (smartModeEnabled) Color.Gray else Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Exercise type buttons
+            ExerciseType.values().forEach { exerciseType ->
+                ExerciseTypeButton(
+                    exerciseType = exerciseType,
+                    isSelected = currentExerciseType == exerciseType && !smartModeEnabled,
+                    isEnabled = !smartModeEnabled,
+                    onClick = { onExerciseSelected(exerciseType) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Individual exercise type selection button
+ */
+@Composable
+private fun ExerciseTypeButton(
+    exerciseType: ExerciseType,
+    isSelected: Boolean,
+    isEnabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .clickable(enabled = isEnabled) { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                isSelected -> Color(0xFF4ECCA3).copy(alpha = 0.3f)
+                isEnabled -> Color.Gray.copy(alpha = 0.2f)
+                else -> Color.Gray.copy(alpha = 0.1f)
+            }
+        ),
+        border = if (isSelected) {
+            BorderStroke(2.dp, Color(0xFF4ECCA3))
+        } else null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = getExerciseIcon(exerciseType),
+                contentDescription = null,
+                tint = when {
+                    isSelected -> Color(0xFF4ECCA3)
+                    isEnabled -> Color.White
+                    else -> Color.Gray
+                },
+                modifier = Modifier.size(24.dp)
+            )
+            
+            Column {
+                Text(
+                    text = ExerciseDetectorFactory.getDisplayName(exerciseType),
+                    color = when {
+                        isSelected -> Color(0xFF4ECCA3)
+                        isEnabled -> Color.White
+                        else -> Color.Gray
+                    },
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = ExerciseDetectorFactory.getDescription(exerciseType),
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    maxLines = 2
+                )
             }
         }
     }
