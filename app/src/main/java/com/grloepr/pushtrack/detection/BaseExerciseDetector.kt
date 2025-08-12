@@ -70,8 +70,8 @@ abstract class BaseExerciseDetector(
         // Update position counts for state confirmation
         updatePositionCounts(detectedPhase)
         
-        // More responsive threshold
-        val confirmationThreshold = max(1, velocityTracker.getAdaptiveThreshold() - 1)
+        // More responsive threshold with minimum of 1
+        val confirmationThreshold = max(1, (velocityTracker.getAdaptiveThreshold() * sensitivityFactor).toInt() - 1)
         // Determine confirmed phase
         val confirmedPhase = getConfirmedPhase(confirmationThreshold)
         

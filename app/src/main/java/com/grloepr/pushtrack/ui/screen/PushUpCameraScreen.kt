@@ -124,10 +124,11 @@ private fun CameraPreviewScreen() {
     val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
     
     // Replace ground-only detector with generic detector
-    var detector by remember { mutableStateOf<ExerciseDetector?>(ExerciseDetectorFactory.createDetector(currentExerciseType)) }
+    var detector by remember { mutableStateOf<ExerciseDetector?>(null) }
+    var resetTrigger by remember { mutableStateOf(0) }
 
     // Recreate detector when exercise type changes (manual or smart)
-    LaunchedEffect(currentExerciseType) {
+    LaunchedEffect(currentExerciseType, resetTrigger) {
         detector = ExerciseDetectorFactory.createDetector(currentExerciseType).also {
             // it.setSensitivity(detectionSensitivity)
         }
@@ -286,7 +287,10 @@ private fun CameraPreviewScreen() {
         
         // Exercise selector toggle button (floating small)
         FloatingActionButton(
-            onClick = { showExerciseSelector = !showExerciseSelector },
+            onClick = { 
+                showExerciseSelector = !showExerciseSelector
+                if (showExerciseSelector) showSettings = false // Close settings when opening selector
+            },
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
             containerColor = Color(0xFF4ECCA3),
             shape = RoundedCornerShape(16.dp)
@@ -300,7 +304,10 @@ private fun CameraPreviewScreen() {
 
         // Settings button (separate)
         FloatingActionButton(
-            onClick = { showSettings = !showSettings },
+            onClick = { 
+                showSettings = !showSettings 
+                if (showSettings) showExerciseSelector = false // Close selector when opening settings
+            },
             modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
             containerColor = Color(0xFF424255),
             shape = RoundedCornerShape(16.dp)
@@ -321,10 +328,14 @@ private fun CameraPreviewScreen() {
                     currentExerciseType = it
                     smartModeEnabled = false
                     showExerciseSelector = false
+                    showSettings = false // Close settings if open
                 },
                 onSmartModeToggle = { enabled ->
                     smartModeEnabled = enabled
-                    if (enabled) showExerciseSelector = false
+                    if (enabled) {
+                        showExerciseSelector = false
+                        showSettings = false // Close settings if open
+                    }
                 },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -340,7 +351,10 @@ private fun CameraPreviewScreen() {
                 debugEnabled = showDebugInfo,
                 onDebugToggle = { showDebugInfo = it },
                 postureEnabled = true,
-                onClose = { showSettings = false },
+                onClose = { 
+                    showSettings = false
+                    showExerciseSelector = false // Close exercise selector if open
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -378,8 +392,8 @@ private fun CameraPreviewScreen() {
         }
     }
 
-    // Collect pose results and process push-ups
-    LaunchedEffect(imageAnalyzer, smartModeEnabled) {
+    // Collect pose results and process exercises - SEPARATED EFFECTS
+    LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
             val pose = poseResult.pose
@@ -430,16 +444,23 @@ private fun CameraPreviewScreen() {
                         rawDetected.name.replace('_',' ').lowercase().replaceFirstChar { it.uppercase() }
                     )
                     lastAnnouncedExercise = rawDetected
-                    detector = ExerciseDetectorFactory.createDetector(rawDetected)
+                    resetTrigger++ // Force detector recreation
                     repCount = 0
                     previousRepCount = 0
+                    return@collect // Skip processing with old detector
                 }
             }
 
+            // Process pose with current detector (safely)
             detector?.processPose(pose)
-
+        }
+    }
+    
+    // SEPARATE effect for detector state collection
+    LaunchedEffect(detector) {
+        detector?.state?.collect { detectorState ->
             // Movement presence heuristic (primary angle change)
-            val primaryAngleNow = detector?.state?.value?.primaryAngle
+            val primaryAngleNow = detectorState.primaryAngle
             if (primaryAngleNow != null && lastPrimaryAngleSnapshot != null) {
                 if (abs(primaryAngleNow - lastPrimaryAngleSnapshot!!) > 2f) {
                     lastRepOrMovementTime = System.currentTimeMillis()
@@ -447,18 +468,22 @@ private fun CameraPreviewScreen() {
             }
             lastPrimaryAngleSnapshot = primaryAngleNow
 
-            repCount = detector?.getRepCount() ?: 0
-            val phase = detector?.getCurrentPhase() ?: ExercisePhase.UP
+            repCount = detectorState.count
+            val phase = detectorState.phase
             val mappedState = when (phase) {
                 ExercisePhase.UP -> PushUpState.UP_POSITION
                 ExercisePhase.DOWN -> PushUpState.DOWN_POSITION
                 ExercisePhase.TRANSITIONING -> PushUpState.UNKNOWN
             }
 
-            val analysisResult = postureAnalyzer.analyzePose(pose, mappedState)
-            currentPostureFeedback = analysisResult.feedback
-            formQuality = analysisResult.formQuality
-            averageFormQuality = analysisResult.averageFormQuality
+            val analysisResult = currentPoseResult?.pose?.let { pose -> 
+                postureAnalyzer.analyzePose(pose, mappedState) 
+            }
+            if (analysisResult != null) {
+                currentPostureFeedback = analysisResult.feedback
+                formQuality = analysisResult.formQuality
+                averageFormQuality = analysisResult.averageFormQuality
+            }
 
             val nowTs = System.currentTimeMillis()
 

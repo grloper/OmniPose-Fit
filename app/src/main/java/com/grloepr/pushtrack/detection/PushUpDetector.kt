@@ -17,15 +17,15 @@ import kotlin.math.min
  */
 class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     
-    // Normalized thresholds (scale-invariant)
-    private val upElbowThreshold = 140f    // Arms extended
-    private val downElbowThreshold = 80f   // Arms bent
-    private val torsoParallelThreshold = 15f // Max degrees from horizontal for good form
+    // Normalized thresholds (scale-invariant) - TUNED for better accuracy
+    private val upElbowThreshold = 130f    // Arms extended (reduced from 140)
+    private val downElbowThreshold = 90f   // Arms bent (increased from 80)
+    private val torsoParallelThreshold = 20f // Max degrees from horizontal for good form (increased tolerance)
     
-    // Advanced processing components
-    private val angleSmoother = TemporalSmoother(emaAlpha = 0.2f)
-    private val torsoPitchSmoother = TemporalSmoother(emaAlpha = 0.25f)
-    private val stateMachine = DebouncedStateMachine(confirmationThreshold = 2)
+    // Advanced processing components - TUNED for responsiveness  
+    private val angleSmoother = TemporalSmoother(emaAlpha = 0.25f) // More responsive
+    private val torsoPitchSmoother = TemporalSmoother(emaAlpha = 0.3f) // More responsive
+    private val stateMachine = DebouncedStateMachine(confirmationThreshold = 2) // Faster response
     private val repCounter = ConfidenceRepCounter()
     
     // Enhanced tracking
@@ -69,8 +69,8 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         val elbow = normalizedPose.getLandmark(elbowType) ?: return null
         val wrist = normalizedPose.getLandmark(wristType) ?: return null
         
-        // Require high confidence for angle calculation
-        if (shoulder.confidence < 0.7f || elbow.confidence < 0.7f || wrist.confidence < 0.7f) {
+        // Require reasonable confidence for angle calculation (lowered threshold)
+        if (shoulder.confidence < 0.6f || elbow.confidence < 0.6f || wrist.confidence < 0.6f) {
             return null
         }
         
@@ -122,10 +122,11 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         val smoothedPitch = torsoPitchSmoother.addSample(torsoPitch)
         
         // For good form push-ups, torso should remain relatively parallel to ground
+        // More forgiving for real-world conditions
         val isGoodForm = abs(smoothedPitch) < torsoParallelThreshold
         
-        // If form is bad during DOWN phase, treat as transitioning
-        return if (!isGoodForm && anglePhase == ExercisePhase.DOWN) {
+        // Only reject DOWN phase if form is really bad (>30 degrees)
+        return if (!isGoodForm && anglePhase == ExercisePhase.DOWN && abs(smoothedPitch) > 30f) {
             ExercisePhase.TRANSITIONING
         } else {
             anglePhase

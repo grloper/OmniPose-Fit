@@ -14,17 +14,17 @@ import kotlin.math.abs
  */
 class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
     
-    // Normalized thresholds for torso movement detection
-    private val torsoRiseThreshold = 0.15f      // Normalized distance torso moves up
-    private val chinBarThreshold = 0.1f         // Normalized distance chin to estimated bar level
-    private val armExtensionThreshold = 120f    // Minimum elbow angle for hanging position
-    private val armContractionThreshold = 70f   // Maximum elbow angle for pulled-up position
+    // Normalized thresholds for torso movement detection - TUNED for better accuracy
+    private val torsoRiseThreshold = 0.12f      // Normalized distance torso moves up (reduced for sensitivity)
+    private val chinBarThreshold = 0.08f        // Normalized distance chin to estimated bar level (reduced)
+    private val armExtensionThreshold = 110f    // Minimum elbow angle for hanging position (reduced)
+    private val armContractionThreshold = 80f   // Maximum elbow angle for pulled-up position (increased)
     
-    // Advanced processing components
-    private val torsoPositionSmoother = TemporalSmoother(emaAlpha = 0.25f)
-    private val chinPositionSmoother = TemporalSmoother(emaAlpha = 0.3f)
-    private val elbowAngleSmoother = TemporalSmoother(emaAlpha = 0.2f)
-    private val stateMachine = DebouncedStateMachine(confirmationThreshold = 3)
+    // Advanced processing components - TUNED for better responsiveness
+    private val torsoPositionSmoother = TemporalSmoother(emaAlpha = 0.3f) // More responsive
+    private val chinPositionSmoother = TemporalSmoother(emaAlpha = 0.35f) // More responsive
+    private val elbowAngleSmoother = TemporalSmoother(emaAlpha = 0.25f) // More responsive
+    private val stateMachine = DebouncedStateMachine(confirmationThreshold = 2) // Faster response
     private val repCounter = ConfidenceRepCounter()
     
     // Enhanced tracking
@@ -79,10 +79,10 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
     ) {
         val avgElbowAngle = calculateAverageElbowAngle(normalizedPose)
         
-        // Look for stable hanging position (extended arms)
+        // Look for stable hanging position (extended arms) - Faster calibration
         if (avgElbowAngle != null && avgElbowAngle > armExtensionThreshold) {
             calibrationFrames++
-            if (calibrationFrames >= 15) {
+            if (calibrationFrames >= 8) { // Reduced from 15 frames
                 hangingTorsoBaseline = torsoPosition
                 
                 // Estimate bar level from hand positions
@@ -141,7 +141,7 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
         
         return when {
             relativeTorsoPosition > torsoRiseThreshold -> ExercisePhase.UP    // Torso raised
-            relativeTorsoPosition < -torsoRiseThreshold/2 -> ExercisePhase.DOWN // Torso lowered
+            relativeTorsoPosition < -torsoRiseThreshold/3 -> ExercisePhase.DOWN // Torso lowered (more sensitive)
             else -> ExercisePhase.TRANSITIONING
         }
     }
