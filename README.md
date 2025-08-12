@@ -4,7 +4,9 @@ PushTrack is an Android application that uses computer vision and ML Kit to coun
 
 ## Features
 
-- **Real-time Push-Up Counting**: Automatically counts push-ups as you perform them
+- **Multi-Exercise Detection**: Automatically detects and counts push-ups, pull-ups, and squats
+- **Modular Architecture**: Extensible design for easy addition of new exercise types
+- **Real-time Counting**: O(1) complexity detection algorithms optimized for performance
 - **Visual Pose Tracking**: Optional skeleton visualization to show detected body landmarks
 - **Camera Switching**: Support for both front and back cameras
 - **Optimized Performance**: Low-latency detection optimized for real-time tracking
@@ -13,13 +15,27 @@ PushTrack is an Android application that uses computer vision and ML Kit to coun
 
 ## How It Works
 
-PushTrack uses ML Kit's Pose Detection to identify key body landmarks such as shoulders, elbows, and wrists. The app then analyzes the relative positions and angles between these landmarks to determine when a complete push-up has been performed.
+PushTrack uses ML Kit's Pose Detection to identify key body landmarks such as shoulders, elbows, wrists, hips, knees, and ankles. The app features a modular detection system that analyzes the relative positions and angles between these landmarks to determine when complete repetitions have been performed for different exercise types.
 
-The detection algorithm is optimized for:
-- Ground position push-ups (phone placed in front of user)
-- Different speeds of movement
-- Various lighting conditions
-- Multiple body types and positions
+### Supported Exercises
+
+- **Push-ups**: Uses elbow angle analysis to detect up/down movements
+- **Pull-ups**: Combines elbow angle and head-to-hands distance for accurate detection
+- **Squats**: Utilizes knee angle and hip height tracking for rep counting
+
+### Modular Architecture
+
+The detection system is built on a strategy pattern with:
+- **ExerciseDetector Interface**: Common contract for all exercise detectors
+- **BaseExerciseDetector**: Abstract class providing O(1) complexity template method
+- **Specific Detectors**: PushUpDetector, PullUpDetector, SquatDetector
+- **Utility Classes**: AngleCalculator, VelocityTracker, EnhancedPostureAnalyzer
+
+The detection algorithms are optimized for:
+- **O(1) Complexity**: Fixed-time processing per frame regardless of exercise duration
+- **Multi-signal Detection**: Uses multiple pose landmarks for increased accuracy
+- **Adaptive Thresholds**: Adjusts detection sensitivity based on movement speed
+- **Various Body Types**: Works with different heights, builds, and exercise positions
 
 ## Requirements
 
@@ -29,13 +45,14 @@ The detection algorithm is optimized for:
 
 ## Usage Instructions
 
-1. **Setup**: Place your phone on the ground in front of you where it can see your upper body
+1. **Setup**: Place your phone where it can see your upper body (for push-ups/pull-ups) or full body (for squats)
 2. **Grant Permissions**: Allow camera permissions when prompted
-3. **Position Yourself**: Get into push-up position facing the phone
-4. **Start Exercising**: The app will automatically count your push-ups
-5. **Debug Mode**: Tap the "DEBUG" button to show/hide skeleton visualization
-6. **Switch Camera**: Use the camera button to switch between front and back cameras
-7. **Reset Counter**: Press the reset button to start counting from zero
+3. **Select Exercise**: Choose your exercise type (push-ups, pull-ups, or squats)
+4. **Position Yourself**: Get into the starting position for your chosen exercise
+5. **Start Exercising**: The app will automatically count your repetitions
+6. **Debug Mode**: Tap the "DEBUG" button to show/hide skeleton visualization
+7. **Switch Camera**: Use the camera button to switch between front and back cameras
+8. **Reset Counter**: Press the reset button to start counting from zero
 
 ## Technical Details
 
@@ -46,11 +63,35 @@ PushTrack is built with:
 - Coroutines and Flows for asynchronous processing
 - Material 3 components for modern UI
 
-The push-up detection algorithm uses multiple signals for accuracy:
-- Elbow angle tracking
-- Head height position
-- Shoulder width changes
-- Movement velocity analysis
+The exercise detection algorithms use multiple signals for accuracy:
+- **Push-ups**: Elbow angle tracking, body alignment analysis
+- **Pull-ups**: Elbow angle tracking, head-to-hands distance measurement
+- **Squats**: Knee angle tracking, hip height analysis, torso alignment
+- **Universal**: Movement velocity analysis, adaptive thresholds, form quality scoring
+
+## Architecture
+
+### Detection System
+
+The modular detection system consists of:
+
+- **ExerciseDetector Interface**: Defines the contract for all exercise detectors
+- **BaseExerciseDetector**: Abstract class implementing O(1) complexity template method
+- **Exercise-Specific Detectors**:
+  - `PushUpDetector`: Elbow angle-based detection
+  - `PullUpDetector`: Combined elbow angle and head-position detection
+  - `SquatDetector`: Knee angle and hip height detection
+- **Utility Classes**:
+  - `AngleCalculator`: O(1) angle calculations between pose landmarks
+  - `VelocityTracker`: Fixed-size circular buffer for movement speed analysis
+  - `EnhancedPostureAnalyzer`: Multi-exercise form analysis with O(1) complexity
+
+### Key Design Principles
+
+- **O(1) Complexity**: All per-frame operations run in constant time
+- **Strategy Pattern**: Easy addition of new exercise types
+- **Fixed-Size Buffers**: No growing state that could impact performance
+- **Template Method**: Consistent detection workflow across all exercises
 
 ## Development Setup
 
@@ -62,10 +103,12 @@ The push-up detection algorithm uses multiple signals for accuracy:
 ## Performance Considerations
 
 The app includes several optimizations for real-time performance:
-- Frame skipping for optimal processing
-- Low-resolution image analysis
-- Intelligent landmark filtering
-- Adaptive thresholds based on movement speed
+- **O(1) Complexity**: Detection algorithms run in constant time per frame
+- **Frame Throttling**: Optimal processing rate to prevent overload
+- **Fixed-Size Buffers**: Circular buffers prevent memory growth over time
+- **Adaptive Thresholds**: Dynamic adjustment based on movement speed
+- **Multi-signal Detection**: Fallback detection methods for increased reliability
+- **Efficient Angle Calculations**: Optimized vector math for pose analysis
 
 ## License
 
