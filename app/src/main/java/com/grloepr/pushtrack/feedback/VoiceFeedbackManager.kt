@@ -3,186 +3,161 @@ package com.grloepr.pushtrack.feedback
 import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import android.util.Log
+import android.os.Bundle // Added import
 import java.util.*
 
 /**
- * Manages voice feedback functionality for the push-up counter app
+ * Provides voice feedback for push-up exercises
  */
 class VoiceFeedbackManager(private val context: Context) {
-    
-    private var textToSpeech: TextToSpeech? = null
-    private val _isInitialized = MutableStateFlow(false)
-    val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
-    
-    // Voice settings
+
+    private var tts: TextToSpeech? = null
+    private var isInitialized = false
+    private var lastAnnouncedCount = 0
+    private var lastPostureFeedback: PostureFeedback? = null
+    private var postureFeedbackThrottleMs = 5000L // Only give feedback every 5 seconds
+    private var lastPostureFeedbackTime = 0L
+
+    // Settings
+    private var isMuted = false
     private var speechRate = 1.0f
     private var pitchRate = 1.0f
     private var volume = 1.0f
-    private var isEnabled = true
-    
-    // Track last announced rep to avoid repetition
-    private var lastAnnouncedRep = -1
-    
+
     init {
-        initializeTextToSpeech()
+        initTTS()
     }
-    
-    private fun initializeTextToSpeech() {
-        textToSpeech = TextToSpeech(context) { status ->
+
+    private fun initTTS() {
+        tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                textToSpeech?.let { tts ->
-                    // Set language to default locale
-                    val result = tts.setLanguage(Locale.getDefault())
-                    
-                    if (result == TextToSpeech.LANG_MISSING_DATA || 
-                        result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                        // Fallback to English if default locale not supported
-                        tts.setLanguage(Locale.ENGLISH)
-                    }
-                    
-                    // Configure speech parameters
-                    tts.setSpeechRate(speechRate)
-                    tts.setPitch(pitchRate)
-                    
-                    // Set utterance progress listener
-                    tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                        override fun onStart(utteranceId: String?) {}
-                        override fun onDone(utteranceId: String?) {}
-                        override fun onError(utteranceId: String?) {}
-                    })
-                    
-                    _isInitialized.value = true
+                val result = tts?.setLanguage(Locale.US)
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    Log.e("TTS", "Language not supported")
+                } else {
+                    isInitialized = true
+                    tts?.setSpeechRate(speechRate)
+                    tts?.setPitch(pitchRate)
+                    Log.d("TTS", "TTS initialized successfully")
                 }
+            } else {
+                Log.e("TTS", "TTS initialization failed")
             }
         }
+
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                // Speech started
+            }
+
+            override fun onDone(utteranceId: String?) {
+                // Speech completed
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                // Error occurred
+                Log.e("TTS", "Error in TTS utterance")
+            }
+        })
     }
-    
+
     /**
-     * Announce a rep count
+     * Announce the current rep count
      */
     fun announceRepCount(count: Int) {
-        if (!isEnabled || count <= lastAnnouncedRep) return
-        
-        val announcement = when {
-            count <= 20 -> getNumberWord(count)
-            count % 5 == 0 -> "$count"
-            else -> null // Only announce every 5th rep after 20
-        }
-        
-        announcement?.let { text ->
-            speak(text, "rep_count_$count")
-            lastAnnouncedRep = count
-        }
-    }
-    
-    /**
-     * Provide posture feedback
-     */
-    fun announcePostureFeedback(feedback: PostureFeedback) {
-        if (!isEnabled) return
-        
-        val message = when (feedback) {
-            PostureFeedback.GOOD_FORM -> "Good form!"
-            PostureFeedback.LOWER_BODY -> "Lower your body more"
-            PostureFeedback.RAISE_BODY -> "Push up higher"
-            PostureFeedback.STRAIGHTEN_BACK -> "Keep your back straight"
-            PostureFeedback.ALIGN_HANDS -> "Align your hands"
-            PostureFeedback.SLOW_DOWN -> "Slow down"
-            PostureFeedback.KEEP_GOING -> "Keep going!"
-        }
-        
-        speak(message, "posture_${feedback.name}")
-    }
-    
-    /**
-     * Announce workout completion
-     */
-    fun announceWorkoutComplete(totalReps: Int) {
-        if (!isEnabled) return
-        
+        if (!isInitialized || isMuted || count <= lastAnnouncedCount) return
+
         val message = when {
-            totalReps == 0 -> "Workout complete!"
-            totalReps == 1 -> "Workout complete! 1 push-up done."
-            else -> "Workout complete! $totalReps push-ups done. Great job!"
+            count % 10 == 0 -> "$count! Great job, keep pushing!"
+            count % 5 == 0 -> "$count! You're doing well!"
+            else -> "$count"
         }
+
+        speak(message)
+        lastAnnouncedCount = count
+    }
+
+    /**
+     * Reset the counter for voice feedback
+     */
+    fun reset() {
+        lastAnnouncedCount = 0
+        lastPostureFeedback = null
+        lastPostureFeedbackTime = 0L
+    }
+
+    /**
+     * Provide feedback about posture issues
+     */
+    fun providePostureFeedback(feedback: PostureFeedback?, formQuality: Float) {
+        if (!isInitialized || isMuted || feedback == null) return
         
-        speak(message, "workout_complete")
-    }
-    
-    /**
-     * Convert number to word (1-20)
-     */
-    private fun getNumberWord(number: Int): String {
-        return when (number) {
-            1 -> "One"
-            2 -> "Two"
-            3 -> "Three"
-            4 -> "Four"
-            5 -> "Five"
-            6 -> "Six"
-            7 -> "Seven"
-            8 -> "Eight"
-            9 -> "Nine"
-            10 -> "Ten"
-            11 -> "Eleven"
-            12 -> "Twelve"
-            13 -> "Thirteen"
-            14 -> "Fourteen"
-            15 -> "Fifteen"
-            16 -> "Sixteen"
-            17 -> "Seventeen"
-            18 -> "Eighteen"
-            19 -> "Nineteen"
-            20 -> "Twenty"
-            else -> "$number"
+        // Don't repeat the same feedback too frequently
+        if (feedback == lastPostureFeedback) {
+            val now = System.currentTimeMillis()
+            if (now - lastPostureFeedbackTime < postureFeedbackThrottleMs) {
+                return
+            }
+        }
+
+        val message = when (feedback) {
+            PostureFeedback.STRAIGHTEN_BACK -> "Keep your back straight"
+            PostureFeedback.LOWER_BODY -> "Go lower"
+            PostureFeedback.RAISE_BODY -> "Push all the way up"
+            PostureFeedback.ALIGN_HANDS -> "Keep your hands aligned"
+            PostureFeedback.GOOD_FORM -> {
+                if (formQuality >= 95) "Perfect form!" else null
+            }
+            else -> null
+        }
+
+        message?.let {
+            speak(it)
+            lastPostureFeedback = feedback
+            lastPostureFeedbackTime = System.currentTimeMillis()
         }
     }
-    
+
     /**
-     * Speak text using TextToSpeech
-     */
-    private fun speak(text: String, utteranceId: String) {
-        textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
-    }
-    
-    /**
-     * Update voice settings
+     * Update voice feedback settings
      */
     fun updateSettings(
-        enabled: Boolean = this.isEnabled,
+        enabled: Boolean,
         speechRate: Float = this.speechRate,
         pitchRate: Float = this.pitchRate,
         volume: Float = this.volume
     ) {
-        this.isEnabled = enabled
-        this.speechRate = speechRate.coerceIn(0.1f, 3.0f)
+        this.isMuted = !enabled
+        this.speechRate = speechRate.coerceIn(0.5f, 3.0f)
         this.pitchRate = pitchRate.coerceIn(0.1f, 2.0f)
         this.volume = volume.coerceIn(0.0f, 1.0f)
-        
-        textToSpeech?.let { tts ->
-            tts.setSpeechRate(this.speechRate)
-            tts.setPitch(this.pitchRate)
-        }
+
+        tts?.setSpeechRate(this.speechRate)
+        tts?.setPitch(this.pitchRate)
     }
-    
+
     /**
-     * Reset rep tracking
+     * Speak a message with configured settings
      */
-    fun reset() {
-        lastAnnouncedRep = -1
+    private fun speak(message: String) {
+        if (!isInitialized || isMuted) return
+
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume)
+        }
+        tts?.speak(message, TextToSpeech.QUEUE_FLUSH, params, "FeedbackMsg_${System.currentTimeMillis()}")
     }
-    
+
     /**
-     * Clean up resources
+     * Cleanup TTS resources
      */
     fun shutdown() {
-        textToSpeech?.stop()
-        textToSpeech?.shutdown()
-        textToSpeech = null
-        _isInitialized.value = false
+        isInitialized = false
+        tts?.stop()
+        tts?.shutdown()
+        tts = null
     }
 }
 
