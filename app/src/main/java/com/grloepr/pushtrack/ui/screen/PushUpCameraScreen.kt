@@ -34,6 +34,7 @@ import com.grloepr.pushtrack.ui.overlay.PoseOverlay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
+import com.grloepr.pushtrack.analysis.PushUpDetector as LegacyPushUpDetector
 
 // Extension function to convert PoseDetectionResult to PoseFrameResult
 fun PoseDetectionResult.toPoseFrameResult(
@@ -111,7 +112,7 @@ private fun CameraPreviewScreen() {
     }
     
     // Initialize legacy push-up detector for compatibility  
-    val legacyPushUpDetector = remember { PushUpDetector() }
+    val legacyPushUpDetector = remember { LegacyPushUpDetector() }
     
     // Initialize pose detection components
     val poseDetectorClient = remember { 
@@ -161,6 +162,7 @@ private fun CameraPreviewScreen() {
                         PostureFeedback.ALIGN_HANDS -> "Align your hands"
                         PostureFeedback.SLOW_DOWN -> "Slow down"
                         PostureFeedback.KEEP_GOING -> "Keep going!"
+                        else -> null // ensure exhaustiveness if enum adds values
                     }
                 }
                 
