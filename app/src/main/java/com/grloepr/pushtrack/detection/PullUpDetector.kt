@@ -2,151 +2,352 @@ package com.grloepr.pushtrack.detection
 
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
-import com.grloepr.pushtrack.detection.utils.AngleCalculator
+import com.grloepr.pushtrack.detection.utils.KeypointNormalizer
+import com.grloepr.pushtrack.detection.utils.TemporalSmoother
+import com.grloepr.pushtrack.detection.utils.DebouncedStateMachine
+import com.grloepr.pushtrack.detection.utils.ConfidenceRepCounter
 import kotlin.math.abs
-import kotlin.math.max
 
 /**
- * Modular pull-up detector with O(1) complexity
- * Uses elbow angle and head-to-hands vertical distance for detection
+ * Enhanced pull-up detector focusing on torso vertical movement and chin-to-bar relationship
+ * Uses normalized keypoints and advanced signal processing for accurate detection
  */
 class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
     
-    // Pull-up specific angle thresholds (opposite of push-ups)
-    private val downThreshold = 60.0f  // Elbow angle when pulled up (arms bent)
-    private val upThreshold = 140.0f   // Elbow angle when hanging (arms extended)
+    // Normalized thresholds for torso movement detection
+    private val torsoRiseThreshold = 0.15f      // Normalized distance torso moves up
+    private val chinBarThreshold = 0.1f         // Normalized distance chin to estimated bar level
+    private val armExtensionThreshold = 120f    // Minimum elbow angle for hanging position
+    private val armContractionThreshold = 70f   // Maximum elbow angle for pulled-up position
     
-    // Vertical distance thresholds for head-to-hands detection
-    private val headHandsUpThreshold = 100f    // Head is below hands (hanging)
-    private val headHandsDownThreshold = 30f   // Head is close to hands (pulled up)
+    // Advanced processing components
+    private val torsoPositionSmoother = TemporalSmoother(emaAlpha = 0.25f)
+    private val chinPositionSmoother = TemporalSmoother(emaAlpha = 0.3f)
+    private val elbowAngleSmoother = TemporalSmoother(emaAlpha = 0.2f)
+    private val stateMachine = DebouncedStateMachine(confirmationThreshold = 3)
+    private val repCounter = ConfidenceRepCounter()
     
-    // Calibration and adaptive detection variables
-    private var hangElbowBaseline: Float? = null
-    private var upElbowBaseline: Float? = null
-    private var hangHeadHandBaseline: Float? = null
-    private var calibrationStable = 0
-    private val calibrationFrames = 30
+    // Enhanced tracking
+    private var lastNormalizedPose: KeypointNormalizer.NormalizedPose? = null
+    private var barLevelEstimate: Float? = null
+    private var hangingTorsoBaseline: Float? = null
+    private var calibrationFrames = 0
+    
     
     /**
-     * Calculate primary angle (average elbow angle) for pull-up detection
+     * Calculate primary signal: torso vertical position for pull-up detection
      */
     override fun calculatePrimaryAngle(pose: Pose): Float? {
-        return AngleCalculator.calculateAverageElbowAngle(pose)
+        val normalizedPose = KeypointNormalizer.normalizePose(pose) ?: return null
+        lastNormalizedPose = normalizedPose
+        
+        // Calculate torso center vertical position
+        val torsoPosition = calculateTorsoVerticalPosition(normalizedPose) ?: return null
+        
+        // Auto-calibrate hanging position
+        calibrateHangingPosition(normalizedPose, torsoPosition)
+        
+        // Return smoothed relative torso position
+        return torsoPositionSmoother.addSample(torsoPosition)
     }
     
     /**
-     * Determine pull-up phase using both elbow angle and head position
+     * Calculate normalized torso vertical position
+     */
+    private fun calculateTorsoVerticalPosition(normalizedPose: KeypointNormalizer.NormalizedPose): Float? {
+        val leftShoulder = normalizedPose.getLandmark(PoseLandmark.LEFT_SHOULDER) ?: return null
+        val rightShoulder = normalizedPose.getLandmark(PoseLandmark.RIGHT_SHOULDER) ?: return null
+        val leftHip = normalizedPose.getLandmark(PoseLandmark.LEFT_HIP) ?: return null
+        val rightHip = normalizedPose.getLandmark(PoseLandmark.RIGHT_HIP) ?: return null
+        
+        // Calculate torso center
+        val shoulderCenterY = (leftShoulder.y + rightShoulder.y) / 2f
+        val hipCenterY = (leftHip.y + rightHip.y) / 2f
+        val torsoCenterY = (shoulderCenterY + hipCenterY) / 2f
+        
+        return KeypointNormalizer.getVerticalPosition(
+            KeypointNormalizer.NormalizedLandmark(0f, torsoCenterY, 1f)
+        )
+    }
+    
+    /**
+     * Auto-calibrate hanging position baseline
+     */
+    private fun calibrateHangingPosition(
+        normalizedPose: KeypointNormalizer.NormalizedPose,
+        torsoPosition: Float
+    ) {
+        val avgElbowAngle = calculateAverageElbowAngle(normalizedPose)
+        
+        // Look for stable hanging position (extended arms)
+        if (avgElbowAngle != null && avgElbowAngle > armExtensionThreshold) {
+            calibrationFrames++
+            if (calibrationFrames >= 15) {
+                hangingTorsoBaseline = torsoPosition
+                
+                // Estimate bar level from hand positions
+                estimateBarLevel(normalizedPose)
+                calibrationFrames = 0
+            }
+        } else {
+            calibrationFrames = 0
+        }
+    }
+    
+    /**
+     * Estimate bar level from hand positions during hanging
+     */
+    private fun estimateBarLevel(normalizedPose: KeypointNormalizer.NormalizedPose) {
+        val leftWrist = normalizedPose.getLandmark(PoseLandmark.LEFT_WRIST)
+        val rightWrist = normalizedPose.getLandmark(PoseLandmark.RIGHT_WRIST)
+        
+        val handPositions = listOfNotNull(leftWrist, rightWrist)
+        if (handPositions.isNotEmpty()) {
+            val avgHandY = handPositions.map { it.y }.average().toFloat()
+            barLevelEstimate = KeypointNormalizer.getVerticalPosition(
+                KeypointNormalizer.NormalizedLandmark(0f, avgHandY, 1f)
+            )
+        }
+    }
+    
+    
+    /**
+     * Determine pull-up phase using torso movement and chin position
      */
     override fun determinePhase(pose: Pose, primaryAngle: Float?): ExercisePhase {
-        val headHandDist = calculateHeadToHandsDistance(pose)
-        
-        // Enhanced calibration
-        if (primaryAngle != null && headHandDist != null) {
-            calibrateHangPosition(primaryAngle, headHandDist)
+        val normalizedPose = lastNormalizedPose
+        if (normalizedPose == null || primaryAngle == null) {
+            return ExercisePhase.TRANSITIONING
         }
         
-        // Use ratio-based detection if calibrated
-        val calibratedPhase = if (hangElbowBaseline != null && primaryAngle != null) {
-            val contractionRatio = primaryAngle / hangElbowBaseline!!
-            when {
-                contractionRatio <= 0.45f -> ExercisePhase.UP      // Highly contracted
-                contractionRatio >= 0.85f -> ExercisePhase.DOWN    // Near full hang
-                else -> ExercisePhase.TRANSITIONING
-            }
-        } else null
+        // Multi-signal analysis for robust detection
+        val torsoPhase = analyzeTorsoMovement(primaryAngle)
+        val chinPhase = analyzeChinPosition(normalizedPose)
+        val elbowPhase = analyzeElbowAngles(normalizedPose)
         
-        // Fallback to fixed thresholds
-        val anglePhase = if (primaryAngle != null) {
-            when {
-                primaryAngle < 70f -> ExercisePhase.UP    // More sensitive up detection
-                primaryAngle > 130f -> ExercisePhase.DOWN // More sensitive down detection
-                else -> ExercisePhase.TRANSITIONING
-            }
-        } else ExercisePhase.TRANSITIONING
+        // Combine signals with prioritization
+        val combinedPhase = combinePhaseSignals(torsoPhase, chinPhase, elbowPhase)
         
-        return calibratedPhase ?: anglePhase
+        // Use debounced state machine
+        return stateMachine.updateState(combinedPhase)
     }
     
-    private fun calibrateHangPosition(elbowAngle: Float, headHandDist: Float) {
-        // Look for stable hanging position (extended arms)
-        if (elbowAngle > 120f && elbowAngle < 180f) {
-            calibrationStable++
-            if (calibrationStable >= calibrationFrames) {
-                hangElbowBaseline = elbowAngle
-                hangHeadHandBaseline = headHandDist
-                calibrationStable = 0
-            }
-        } else if (elbowAngle < 80f && hangElbowBaseline != null) {
-            // Calibrate contracted position
-            upElbowBaseline = elbowAngle
-        } else {
-            calibrationStable = max(0, calibrationStable - 1)
+    /**
+     * Analyze torso vertical movement relative to hanging baseline
+     */
+    private fun analyzeTorsoMovement(torsoPosition: Float): ExercisePhase? {
+        val baseline = hangingTorsoBaseline ?: return null
+        val relativeTorsoPosition = torsoPosition - baseline
+        
+        return when {
+            relativeTorsoPosition > torsoRiseThreshold -> ExercisePhase.UP    // Torso raised
+            relativeTorsoPosition < -torsoRiseThreshold/2 -> ExercisePhase.DOWN // Torso lowered
+            else -> ExercisePhase.TRANSITIONING
         }
     }
     
     /**
-     * Calculate confidence based on angle reliability and landmark visibility
+     * Analyze chin position relative to estimated bar level
+     */
+    private fun analyzeChinPosition(normalizedPose: KeypointNormalizer.NormalizedPose): ExercisePhase? {
+        val nose = normalizedPose.getLandmark(PoseLandmark.NOSE) ?: return null
+        val barLevel = barLevelEstimate ?: return null
+        
+        val chinPosition = KeypointNormalizer.getVerticalPosition(nose)
+        val smoothedChinPosition = chinPositionSmoother.addSample(chinPosition)
+        val chinToBarDistance = smoothedChinPosition - barLevel
+        
+        return when {
+            chinToBarDistance > -chinBarThreshold -> ExercisePhase.UP    // Chin near/above bar
+            chinToBarDistance < -chinBarThreshold * 2 -> ExercisePhase.DOWN // Chin well below bar
+            else -> ExercisePhase.TRANSITIONING
+        }
+    }
+    
+    /**
+     * Analyze elbow angles for arm extension/contraction
+     */
+    private fun analyzeElbowAngles(normalizedPose: KeypointNormalizer.NormalizedPose): ExercisePhase? {
+        val avgElbowAngle = calculateAverageElbowAngle(normalizedPose) ?: return null
+        val smoothedAngle = elbowAngleSmoother.addSample(avgElbowAngle)
+        
+        return when {
+            smoothedAngle < armContractionThreshold -> ExercisePhase.UP      // Arms contracted (pulled up)
+            smoothedAngle > armExtensionThreshold -> ExercisePhase.DOWN     // Arms extended (hanging)
+            else -> ExercisePhase.TRANSITIONING
+        }
+    }
+    
+    /**
+     * Calculate average elbow angle from normalized pose
+     */
+    private fun calculateAverageElbowAngle(normalizedPose: KeypointNormalizer.NormalizedPose): Float? {
+        val leftAngle = calculateNormalizedElbowAngle(normalizedPose, isLeft = true)
+        val rightAngle = calculateNormalizedElbowAngle(normalizedPose, isLeft = false)
+        
+        val validAngles = listOfNotNull(leftAngle, rightAngle)
+        return if (validAngles.isNotEmpty()) {
+            validAngles.average().toFloat()
+        } else {
+            null
+        }
+    }
+    
+    /**
+     * Calculate normalized elbow angle
+     */
+    private fun calculateNormalizedElbowAngle(
+        normalizedPose: KeypointNormalizer.NormalizedPose,
+        isLeft: Boolean
+    ): Float? {
+        val shoulderType = if (isLeft) PoseLandmark.LEFT_SHOULDER else PoseLandmark.RIGHT_SHOULDER
+        val elbowType = if (isLeft) PoseLandmark.LEFT_ELBOW else PoseLandmark.RIGHT_ELBOW
+        val wristType = if (isLeft) PoseLandmark.LEFT_WRIST else PoseLandmark.RIGHT_WRIST
+        
+        val shoulder = normalizedPose.getLandmark(shoulderType) ?: return null
+        val elbow = normalizedPose.getLandmark(elbowType) ?: return null
+        val wrist = normalizedPose.getLandmark(wristType) ?: return null
+        
+        if (shoulder.confidence < 0.6f || elbow.confidence < 0.6f || wrist.confidence < 0.6f) {
+            return null
+        }
+        
+        return KeypointNormalizer.calculateNormalizedAngle(shoulder, elbow, wrist)
+    }
+    
+    /**
+     * Combine multiple phase signals with intelligent prioritization
+     */
+    private fun combinePhaseSignals(
+        torsoPhase: ExercisePhase?,
+        chinPhase: ExercisePhase?,
+        elbowPhase: ExercisePhase?
+    ): ExercisePhase {
+        val signals = listOfNotNull(torsoPhase, chinPhase, elbowPhase)
+        
+        if (signals.isEmpty()) {
+            return ExercisePhase.TRANSITIONING
+        }
+        
+        // Count votes for each phase
+        val upVotes = signals.count { it == ExercisePhase.UP }
+        val downVotes = signals.count { it == ExercisePhase.DOWN }
+        val transitionVotes = signals.count { it == ExercisePhase.TRANSITIONING }
+        
+        // Majority vote with preference for definitive phases
+        return when {
+            upVotes > downVotes && upVotes > transitionVotes -> ExercisePhase.UP
+            downVotes > upVotes && downVotes > transitionVotes -> ExercisePhase.DOWN
+            else -> ExercisePhase.TRANSITIONING
+        }
+    }
+    
+    
+    /**
+     * Enhanced confidence calculation based on multiple signal quality
      */
     override fun calculateConfidence(pose: Pose, primaryAngle: Float?): Float {
-        var conf = 0f
+        val normalizedPose = lastNormalizedPose
+        if (normalizedPose == null || primaryAngle == null) {
+            return 0f
+        }
+        
+        var confidence = 0f
         var factors = 0
         
-        if (primaryAngle != null) {
-            conf += 0.8f
+        // Base confidence from pose normalization quality
+        confidence += normalizedPose.confidence
+        factors++
+        
+        // Calibration bonus
+        if (hangingTorsoBaseline != null) {
+            confidence += 0.3f
             factors++
         }
         
-        if (hangElbowBaseline != null) {
-            conf += 0.2f // Calibration bonus
+        // Bar level estimation bonus
+        if (barLevelEstimate != null) {
+            confidence += 0.2f
             factors++
         }
         
-        // Check wrist visibility (important for pull-ups)
-        val leftWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
-        val rightWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
-        if (leftWrist?.inFrameLikelihood ?: 0f > 0.6f && 
-            rightWrist?.inFrameLikelihood ?: 0f > 0.6f) {
-            conf += 0.2f
+        // Key landmark visibility for pull-ups
+        val requiredLandmarks = listOf(
+            PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+            PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+            PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST,
+            PoseLandmark.NOSE
+        )
+        
+        if (KeypointNormalizer.hasSufficientQuality(normalizedPose, requiredLandmarks)) {
+            confidence += 0.3f
             factors++
         }
         
-        return if (factors > 0) (conf / factors).coerceIn(0f, 1f) else 0f
-    }
-    
-    /**
-     * Calculate vertical distance between head and average hand position
-     * Used as secondary detection signal for pull-ups
-     */
-    private fun calculateHeadToHandsDistance(pose: Pose): Float? {
-        val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
-        val leftWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
-        val rightWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
+        // Multi-signal consistency bonus
+        val torsoPhase = analyzeTorsoMovement(primaryAngle)
+        val chinPhase = analyzeChinPosition(normalizedPose)
+        val elbowPhase = analyzeElbowAngles(normalizedPose)
         
-        if (nose == null) return null
+        val definiteSignals = listOfNotNull(torsoPhase, chinPhase, elbowPhase)
+            .count { it != ExercisePhase.TRANSITIONING }
         
-        // Calculate average hand position
-        val handY = when {
-            leftWrist != null && rightWrist != null -> {
-                (leftWrist.position.y + rightWrist.position.y) / 2f
-            }
-            leftWrist != null -> leftWrist.position.y
-            rightWrist != null -> rightWrist.position.y
-            else -> return null
+        if (definiteSignals >= 2) {
+            confidence += 0.2f
+            factors++
         }
         
-        // Return vertical distance (positive when head is below hands)
-        return abs(handY - nose.position.y)
+        val finalConfidence = if (factors > 0) (confidence / factors).coerceIn(0f, 1f) else 0f
+        
+        // Update rep counter
+        val currentPhase = stateMachine.getCurrentState()
+        repCounter.processPhase(currentPhase, finalConfidence)
+        
+        return finalConfidence
     }
     
     /**
      * Get detection method description
      */
     override fun getDetectionMethod(): String {
-        return if (lastPrimaryAngle != null) {
-            "elbow_angle"
+        val methods = mutableListOf<String>()
+        
+        if (hangingTorsoBaseline != null) methods.add("torso_movement")
+        if (barLevelEstimate != null) methods.add("chin_to_bar")
+        if (lastPrimaryAngle != null) methods.add("elbow_angles")
+        
+        val baseMethod = if (methods.isNotEmpty()) {
+            "multi_signal(${methods.joinToString(",")})"
         } else {
-            "head_hands_distance"
+            "basic_elbow"
         }
+        
+        val uncertainReps = repCounter.getUncertainReps()
+        return if (uncertainReps > 0) {
+            "$baseMethod+uncertain_reps"
+        } else {
+            baseMethod
+        }
+    }
+    
+    /**
+     * Get rep count from confidence-based counter
+     */
+    override fun getRepCount(): Int = repCounter.getTotalReps()
+    
+    /**
+     * Get detailed statistics
+     */
+    fun getDetailedStats(): Map<String, Any> {
+        val baseStats = repCounter.getStats()
+        return baseStats + mapOf(
+            "is_calibrated" to (hangingTorsoBaseline != null),
+            "bar_level_estimated" to (barLevelEstimate != null),
+            "state_machine_progress" to stateMachine.getTransitionProgress(),
+            "is_transitioning" to stateMachine.isTransitioning(),
+            "torso_baseline" to (hangingTorsoBaseline ?: "not_set"),
+            "bar_level" to (barLevelEstimate ?: "not_set")
+        )
     }
     
     /**
@@ -154,9 +355,14 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
      */
     override fun reset() {
         super.reset()
-        hangElbowBaseline = null
-        upElbowBaseline = null
-        hangHeadHandBaseline = null
-        calibrationStable = 0
+        torsoPositionSmoother.reset()
+        chinPositionSmoother.reset()
+        elbowAngleSmoother.reset()
+        stateMachine.reset()
+        repCounter.reset()
+        lastNormalizedPose = null
+        barLevelEstimate = null
+        hangingTorsoBaseline = null
+        calibrationFrames = 0
     }
 }

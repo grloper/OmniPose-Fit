@@ -3,152 +3,255 @@ package com.grloepr.pushtrack.detection
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 import com.grloepr.pushtrack.detection.utils.AngleCalculator
+import com.grloepr.pushtrack.detection.utils.KeypointNormalizer
+import com.grloepr.pushtrack.detection.utils.TemporalSmoother
+import com.grloepr.pushtrack.detection.utils.DebouncedStateMachine
+import com.grloepr.pushtrack.detection.utils.ConfidenceRepCounter
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Modular push-up detector with O(1) complexity
- * Uses elbow angle as primary detection signal
+ * Enhanced push-up detector with temporal smoothing and confidence tracking
+ * Uses normalized keypoints and advanced signal processing for robust detection
  */
 class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     
-    // Enhanced thresholds for ground position
+    // Normalized thresholds (scale-invariant)
     private val upElbowThreshold = 140f    // Arms extended
-    private val downElbowThreshold = 80f   // Arms bent (more sensitive)
+    private val downElbowThreshold = 80f   // Arms bent
+    private val torsoParallelThreshold = 15f // Max degrees from horizontal for good form
     
-    // Ground position calibration
-    private var groundHeadLevel: Float? = null
-    private var upHeadLevel: Float? = null
-    private var calibrationFrames = 0
-    private val calibrationRequired = 15
+    // Advanced processing components
+    private val angleSmoother = TemporalSmoother(emaAlpha = 0.2f)
+    private val torsoPitchSmoother = TemporalSmoother(emaAlpha = 0.25f)
+    private val stateMachine = DebouncedStateMachine(confirmationThreshold = 2)
+    private val repCounter = ConfidenceRepCounter()
     
-    // Enhanced movement tracking
-    private var lastHeadY: Float? = null
-    private var headMovementBuffer = mutableListOf<Float>()
-    private val maxMovementSamples = 8
+    // Enhanced tracking
+    private var lastNormalizedPose: KeypointNormalizer.NormalizedPose? = null
+    private var consecutiveLowConfidenceFrames = 0
+    private val maxLowConfidenceFrames = 5
+    
     
     /**
-     * Calculate primary angle (average elbow angle) for push-up detection
+     * Calculate primary angle (normalized average elbow angle) for push-up detection
      */
     override fun calculatePrimaryAngle(pose: Pose): Float? {
-        return AngleCalculator.calculateAverageElbowAngle(pose)
+        val normalizedPose = KeypointNormalizer.normalizePose(pose) ?: return null
+        lastNormalizedPose = normalizedPose
+        
+        // Calculate elbow angles using normalized coordinates
+        val leftAngle = calculateNormalizedElbowAngle(normalizedPose, isLeft = true)
+        val rightAngle = calculateNormalizedElbowAngle(normalizedPose, isLeft = false)
+        
+        val validAngles = listOfNotNull(leftAngle, rightAngle)
+        if (validAngles.isEmpty()) return null
+        
+        val averageAngle = validAngles.average().toFloat()
+        
+        // Apply temporal smoothing
+        return angleSmoother.addSample(averageAngle)
     }
     
     /**
-     * Determine push-up phase based on elbow angle
+     * Calculate normalized elbow angle
+     */
+    private fun calculateNormalizedElbowAngle(
+        normalizedPose: KeypointNormalizer.NormalizedPose,
+        isLeft: Boolean
+    ): Float? {
+        val shoulderType = if (isLeft) PoseLandmark.LEFT_SHOULDER else PoseLandmark.RIGHT_SHOULDER
+        val elbowType = if (isLeft) PoseLandmark.LEFT_ELBOW else PoseLandmark.RIGHT_ELBOW
+        val wristType = if (isLeft) PoseLandmark.LEFT_WRIST else PoseLandmark.RIGHT_WRIST
+        
+        val shoulder = normalizedPose.getLandmark(shoulderType) ?: return null
+        val elbow = normalizedPose.getLandmark(elbowType) ?: return null
+        val wrist = normalizedPose.getLandmark(wristType) ?: return null
+        
+        // Require high confidence for angle calculation
+        if (shoulder.confidence < 0.7f || elbow.confidence < 0.7f || wrist.confidence < 0.7f) {
+            return null
+        }
+        
+        return KeypointNormalizer.calculateNormalizedAngle(shoulder, elbow, wrist)
+    }
+    
+    /**
+     * Determine push-up phase using enhanced detection logic
      */
     override fun determinePhase(pose: Pose, primaryAngle: Float?): ExercisePhase {
-        val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
-        
-        // Auto-calibrate ground and up positions
-        if (nose != null && primaryAngle != null) {
-            calibrateGroundPosition(nose.position.y, primaryAngle)
+        if (primaryAngle == null) {
+            consecutiveLowConfidenceFrames++
+            return if (consecutiveLowConfidenceFrames > maxLowConfidenceFrames) {
+                ExercisePhase.TRANSITIONING
+            } else {
+                stateMachine.getCurrentState()
+            }
         }
         
-        // Use head movement as primary signal for ground push-ups
-        val headPhase = if (nose != null && groundHeadLevel != null && upHeadLevel != null) {
-            val currentY = nose.position.y
-            val range = abs(upHeadLevel!! - groundHeadLevel!!)
-            if (range > 20f) { // Sufficient range detected
-                val relativePosition = (currentY - groundHeadLevel!!) / range
-                when {
-                    relativePosition < 0.2f -> ExercisePhase.DOWN  // Close to ground
-                    relativePosition > 0.7f -> ExercisePhase.UP    // Head up
-                    else -> ExercisePhase.TRANSITIONING
-                }
-            } else null
-        } else null
+        consecutiveLowConfidenceFrames = 0
         
-        // Enhanced elbow angle detection
-        val anglePhase = if (primaryAngle != null) {
-            when {
-                primaryAngle < downElbowThreshold -> ExercisePhase.DOWN
-                primaryAngle > upElbowThreshold -> ExercisePhase.UP
-                else -> ExercisePhase.TRANSITIONING
-            }
-        } else null
+        // Enhanced phase detection with torso analysis
+        val anglePhase = when {
+            primaryAngle < downElbowThreshold -> ExercisePhase.DOWN
+            primaryAngle > upElbowThreshold -> ExercisePhase.UP
+            else -> ExercisePhase.TRANSITIONING
+        }
         
-        // Prefer head movement for ground push-ups, fallback to angle
-        return headPhase ?: anglePhase ?: ExercisePhase.TRANSITIONING
+        // Validate with torso parallelism for good form
+        val torsoPhase = validateWithTorsoForm(lastNormalizedPose, anglePhase)
+        
+        // Use debounced state machine
+        return stateMachine.updateState(torsoPhase)
     }
     
-    private fun calibrateGroundPosition(headY: Float, elbowAngle: Float) {
-        // Track head movement
-        lastHeadY?.let { lastY ->
-            val movement = abs(headY - lastY)
-            headMovementBuffer.add(movement)
-            if (headMovementBuffer.size > maxMovementSamples) {
-                headMovementBuffer.removeAt(0)
-            }
-        }
-        lastHeadY = headY
+    
+    /**
+     * Validate detected phase with torso form analysis
+     */
+    private fun validateWithTorsoForm(
+        normalizedPose: KeypointNormalizer.NormalizedPose?,
+        anglePhase: ExercisePhase
+    ): ExercisePhase {
+        if (normalizedPose == null) return anglePhase
         
-        // Calibrate during stable periods
-        val avgMovement = if (headMovementBuffer.isNotEmpty()) 
-            headMovementBuffer.average().toFloat() else 0f
-            
-        if (avgMovement < 3f) { // Stable position
-            calibrationFrames++
-            
-            if (calibrationFrames >= calibrationRequired) {
-                when {
-                    elbowAngle < 100f -> { // Person is down
-                        groundHeadLevel = headY
-                    }
-                    elbowAngle > 140f -> { // Person is up
-                        upHeadLevel = headY
-                    }
-                }
-                calibrationFrames = 0
-            }
+        val torsoPitch = calculateTorsoPitch(normalizedPose)
+        if (torsoPitch == null) return anglePhase
+        
+        val smoothedPitch = torsoPitchSmoother.addSample(torsoPitch)
+        
+        // For good form push-ups, torso should remain relatively parallel to ground
+        val isGoodForm = abs(smoothedPitch) < torsoParallelThreshold
+        
+        // If form is bad during DOWN phase, treat as transitioning
+        return if (!isGoodForm && anglePhase == ExercisePhase.DOWN) {
+            ExercisePhase.TRANSITIONING
         } else {
-            calibrationFrames = 0
+            anglePhase
         }
     }
     
     /**
-     * Calculate confidence based on angle reliability and landmark visibility
+     * Calculate torso pitch angle (degrees from horizontal)
+     */
+    private fun calculateTorsoPitch(normalizedPose: KeypointNormalizer.NormalizedPose): Float? {
+        val leftShoulder = normalizedPose.getLandmark(PoseLandmark.LEFT_SHOULDER)
+        val rightShoulder = normalizedPose.getLandmark(PoseLandmark.RIGHT_SHOULDER)
+        val leftHip = normalizedPose.getLandmark(PoseLandmark.LEFT_HIP)
+        val rightHip = normalizedPose.getLandmark(PoseLandmark.RIGHT_HIP)
+        
+        if (leftShoulder == null || rightShoulder == null || leftHip == null || rightHip == null) {
+            return null
+        }
+        
+        // Calculate torso center points
+        val shoulderCenterY = (leftShoulder.y + rightShoulder.y) / 2f
+        val hipCenterY = (leftHip.y + rightHip.y) / 2f
+        val shoulderCenterX = (leftShoulder.x + rightShoulder.x) / 2f
+        val hipCenterX = (leftHip.x + rightHip.x) / 2f
+        
+        // Calculate angle from horizontal
+        val deltaY = shoulderCenterY - hipCenterY
+        val deltaX = shoulderCenterX - hipCenterX
+        
+        return if (deltaX != 0f) {
+            Math.toDegrees(kotlin.math.atan(deltaY / deltaX).toDouble()).toFloat()
+        } else {
+            0f
+        }
+    }
+    
+    /**
+     * Enhanced confidence calculation with form analysis
      */
     override fun calculateConfidence(pose: Pose, primaryAngle: Float?): Float {
+        val normalizedPose = lastNormalizedPose
+        if (normalizedPose == null || primaryAngle == null) {
+            return 0f
+        }
+        
         var confidence = 0f
         var factors = 0
         
-        if (primaryAngle != null) {
-            confidence += 0.7f
-            factors++
-        }
+        // Base confidence from pose quality
+        confidence += normalizedPose.confidence
+        factors++
         
-        // Boost confidence if calibrated
-        if (groundHeadLevel != null && upHeadLevel != null) {
+        // Angle reliability bonus
+        if (primaryAngle > 0f) {
             confidence += 0.3f
             factors++
         }
         
-        // Check landmark visibility
-        val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
-        val leftShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
-        val rightShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
-        
-        if (nose?.inFrameLikelihood ?: 0f > 0.7f && 
-            leftShoulder?.inFrameLikelihood ?: 0f > 0.7f &&
-            rightShoulder?.inFrameLikelihood ?: 0f > 0.7f) {
+        // Form bonus (good torso alignment)
+        val torsoPitch = calculateTorsoPitch(normalizedPose)
+        if (torsoPitch != null && abs(torsoPitch) < torsoParallelThreshold) {
             confidence += 0.2f
             factors++
         }
         
-        return if (factors > 0) (confidence / factors).coerceIn(0f, 1f) else 0f
+        // Key landmark visibility bonus
+        val requiredLandmarks = listOf(
+            PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+            PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+            PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST
+        )
+        
+        if (KeypointNormalizer.hasSufficientQuality(normalizedPose, requiredLandmarks)) {
+            confidence += 0.2f
+            factors++
+        }
+        
+        val finalConfidence = if (factors > 0) (confidence / factors).coerceIn(0f, 1f) else 0f
+        
+        // Update rep counter with phase and confidence
+        val currentPhase = stateMachine.getCurrentState()
+        repCounter.processPhase(currentPhase, finalConfidence)
+        
+        return finalConfidence
     }
+    
     
     /**
      * Get detection method description
      */
     override fun getDetectionMethod(): String {
-        return when {
-            groundHeadLevel != null && upHeadLevel != null -> "ground_calibrated"
-            lastPrimaryAngle != null -> "elbow_angle"
-            else -> "none"
+        val baseMethod = if (lastPrimaryAngle != null) "normalized_elbow_angle" else "none"
+        val confidence = repCounter.getCurrentRepConfidence()
+        val uncertainReps = repCounter.getUncertainReps()
+        
+        return if (uncertainReps > 0) {
+            "$baseMethod+uncertain_reps"
+        } else {
+            baseMethod
         }
+    }
+    
+    /**
+     * Get rep count from confidence-based counter
+     */
+    override fun getRepCount(): Int = repCounter.getTotalReps()
+    
+    /**
+     * Get additional statistics
+     */
+    fun getDetailedStats(): Map<String, Any> {
+        val baseStats = repCounter.getStats()
+        return baseStats + mapOf(
+            "torso_form_quality" to calculateFormQuality(),
+            "state_machine_progress" to stateMachine.getTransitionProgress(),
+            "is_transitioning" to stateMachine.isTransitioning()
+        )
+    }
+    
+    /**
+     * Calculate form quality based on torso alignment
+     */
+    private fun calculateFormQuality(): Float {
+        val currentPitch = torsoPitchSmoother.getCurrentValue() ?: return 0f
+        val formScore = (torsoParallelThreshold - abs(currentPitch).coerceAtMost(torsoParallelThreshold)) / torsoParallelThreshold
+        return formScore.coerceIn(0f, 1f)
     }
     
     /**
@@ -156,10 +259,11 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
      */
     override fun reset() {
         super.reset()
-        groundHeadLevel = null
-        upHeadLevel = null
-        calibrationFrames = 0
-        lastHeadY = null
-        headMovementBuffer.clear()
+        angleSmoother.reset()
+        torsoPitchSmoother.reset()
+        stateMachine.reset()
+        repCounter.reset()
+        lastNormalizedPose = null
+        consecutiveLowConfidenceFrames = 0
     }
 }
