@@ -176,8 +176,15 @@ private fun CameraPreviewScreen() {
             
             // Smart mode: Auto-detect exercise type based on pose patterns
             if (smartModeEnabled) {
-                // TODO: Implement smart auto-detection logic
-                // This would analyze pose patterns to automatically switch exercise types
+                val detectedType = detectExerciseType(poseResult.pose)
+                if (detectedType != currentExerciseType) {
+                    currentExerciseType = detectedType
+                    // Reset when switching exercise types
+                    exerciseDetector.reset()
+                    legacyPushUpDetector.reset()
+                    voiceFeedbackManager.reset()
+                    workoutStartTime = System.currentTimeMillis()
+                }
             }
         }
     }
@@ -499,4 +506,70 @@ private fun ExerciseOverlay(
             }
         }
     }
+}
+
+/**
+ * Smart auto-detection of exercise type based on pose analysis
+ * This analyzes body position and movement patterns to determine the most likely exercise
+ */
+private fun detectExerciseType(pose: Pose): ExerciseType {
+    val landmarks = pose.allPoseLandmarks
+    if (landmarks.isEmpty()) return ExerciseType.PUSH_UP // Default fallback
+    
+    try {
+        // Get key landmarks for analysis
+        val head = landmarks.find { it.landmarkType == com.google.mlkit.vision.pose.PoseLandmark.NOSE }
+        val leftShoulder = landmarks.find { it.landmarkType == com.google.mlkit.vision.pose.PoseLandmark.LEFT_SHOULDER }
+        val rightShoulder = landmarks.find { it.landmarkType == com.google.mlkit.vision.pose.PoseLandmark.RIGHT_SHOULDER }
+        val leftHip = landmarks.find { it.landmarkType == com.google.mlkit.vision.pose.PoseLandmark.LEFT_HIP }
+        val rightHip = landmarks.find { it.landmarkType == com.google.mlkit.vision.pose.PoseLandmark.RIGHT_HIP }
+        val leftKnee = landmarks.find { it.landmarkType == com.google.mlkit.vision.pose.PoseLandmark.LEFT_KNEE }
+        val rightKnee = landmarks.find { it.landmarkType == com.google.mlkit.vision.pose.PoseLandmark.RIGHT_KNEE }
+        val leftAnkle = landmarks.find { it.landmarkType == com.google.mlkit.vision.pose.PoseLandmark.LEFT_ANKLE }
+        val rightAnkle = landmarks.find { it.landmarkType == com.google.mlkit.vision.pose.PoseLandmark.RIGHT_ANKLE }
+        
+        // Calculate body orientation and position
+        if (head != null && leftShoulder != null && rightShoulder != null && 
+            leftHip != null && rightHip != null) {
+            
+            val avgShoulderY = (leftShoulder.position.y + rightShoulder.position.y) / 2
+            val avgHipY = (leftHip.position.y + rightHip.position.y) / 2
+            val headY = head.position.y
+            
+            // Check if person is horizontal (push-up position)
+            val bodyAngle = kotlin.math.abs(avgShoulderY - avgHipY)
+            val isHorizontal = bodyAngle < 50f // Small Y difference indicates horizontal position
+            
+            // Check if head is above shoulders (standing/hanging position)
+            val headAboveShoulders = headY < avgShoulderY - 20f
+            
+            // Check knee positions for squatting
+            if (leftKnee != null && rightKnee != null && leftAnkle != null && rightAnkle != null) {
+                val avgKneeY = (leftKnee.position.y + rightKnee.position.y) / 2
+                val avgAnkleY = (leftAnkle.position.y + rightAnkle.position.y) / 2
+                val kneeBend = avgAnkleY - avgKneeY // Positive when knees are bent (squatting)
+                
+                // Squat detection: knees bent, body upright
+                if (kneeBend > 30f && !isHorizontal && headAboveShoulders) {
+                    return ExerciseType.SQUAT
+                }
+            }
+            
+            // Pull-up detection: hanging position with arms extended above head
+            if (headAboveShoulders && !isHorizontal) {
+                return ExerciseType.PULL_UP
+            }
+            
+            // Push-up detection: horizontal body position
+            if (isHorizontal) {
+                return ExerciseType.PUSH_UP
+            }
+        }
+    } catch (e: Exception) {
+        // If any error occurs in detection, fallback to push-up
+        return ExerciseType.PUSH_UP
+    }
+    
+    // Default to push-up if no clear pattern is detected
+    return ExerciseType.PUSH_UP
 }

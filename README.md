@@ -5,9 +5,13 @@ PushTrack is an Android application that uses computer vision and ML Kit to coun
 ## Features
 
 - **Multi-Exercise Detection**: Automatically detects and counts push-ups, pull-ups, and squats
+- **Smart Modes**: Auto-detection mode that automatically identifies exercise type based on body position
+- **Manual Exercise Selection**: Choose specific exercise types with visual feedback
 - **Modular Architecture**: Extensible design for easy addition of new exercise types
 - **Real-time Counting**: O(1) complexity detection algorithms optimized for performance
 - **Visual Pose Tracking**: Optional skeleton visualization to show detected body landmarks
+- **Form Quality Analysis**: Real-time feedback on exercise form and posture
+- **Voice Feedback**: Optional voice announcements for rep counts and form guidance
 - **Camera Switching**: Support for both front and back cameras
 - **Optimized Performance**: Low-latency detection optimized for real-time tracking
 - **Debug Mode**: Toggle skeleton visualization and debugging information
@@ -47,7 +51,12 @@ The detection algorithms are optimized for:
 
 1. **Setup**: Place your phone where it can see your upper body (for push-ups/pull-ups) or full body (for squats)
 2. **Grant Permissions**: Allow camera permissions when prompted
-3. **Select Exercise**: Choose your exercise type (push-ups, pull-ups, or squats)
+3. **Exercise Selection**: 
+   - **Smart Mode**: Enable smart mode for automatic exercise type detection
+   - **Manual Mode**: Tap the exercise selector button to choose specific exercise types
+4. **Start Exercising**: Begin your workout - the app will automatically detect and count reps
+5. **Monitor Form**: Watch for real-time form feedback and quality indicators
+6. **Voice Feedback**: Enable voice announcements in settings for audio guidance
 4. **Position Yourself**: Get into the starting position for your chosen exercise
 5. **Start Exercising**: The app will automatically count your repetitions
 6. **Debug Mode**: Tap the "DEBUG" button to show/hide skeleton visualization
