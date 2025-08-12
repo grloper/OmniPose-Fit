@@ -163,6 +163,9 @@ private fun CameraPreviewScreen() {
     var lastPrimaryAngleSnapshot by remember { mutableStateOf<Float?>(null) }
     val smartSwitchCooldownMs = 5000L
     val stabilityFramesRequired = 25 // ~0.5s at 50fps
+    // ADDED missing rep quality states
+    var repStatusMessage by remember { mutableStateOf<String?>(null) }
+    var previousPhase by remember { mutableStateOf(ExercisePhase.UP) }
     // ADDED: lift visibility tracking states to outer scope
     var fullyVisible by remember { mutableStateOf(false) }
     var visibilityHint by remember { mutableStateOf<String?>(null) }
@@ -319,6 +322,25 @@ private fun CameraPreviewScreen() {
             )
         }
 
+        // Rep status chip (transient)
+        if (repStatusMessage != null) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top =  (if (LocalConfiguration.current.screenHeightDp < 700) 48.dp else 70.dp)),
+                color = Color.Black.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(
+                    repStatusMessage!!,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
         // Exercise selector panel
         if (showExerciseSelector) {
             ExerciseSelectorCard(
@@ -389,6 +411,14 @@ private fun CameraPreviewScreen() {
                     fontWeight = FontWeight.Medium
                 )
             }
+        }
+    }
+
+    // Auto clear rep status message
+    LaunchedEffect(repStatusMessage) {
+        if (repStatusMessage != null) {
+            kotlinx.coroutines.delay(1800)
+            repStatusMessage = null
         }
     }
 
@@ -468,6 +498,7 @@ private fun CameraPreviewScreen() {
             }
             lastPrimaryAngleSnapshot = primaryAngleNow
 
+            val oldCount = repCount
             repCount = detectorState.count
             val phase = detectorState.phase
             val mappedState = when (phase) {
@@ -484,6 +515,32 @@ private fun CameraPreviewScreen() {
                 formQuality = analysisResult.formQuality
                 averageFormQuality = analysisResult.averageFormQuality
             }
+
+            // Rep quality evaluation (when transition DOWN->UP without count increment)
+            if (previousPhase == ExercisePhase.DOWN && phase == ExercisePhase.UP && repCount == oldCount) {
+                val badDepth = currentPostureFeedback == PostureFeedback.LOWER_BODY
+                val badLockout = currentPostureFeedback == PostureFeedback.RAISE_BODY
+                val rejected = formQuality < 60f || badDepth || badLockout
+                val uncertain = !rejected && formQuality in 60f..74f
+                if (rejected) {
+                    val reason = when {
+                        badDepth -> "depth"
+                        badLockout -> "lockout"
+                        else -> null
+                    }
+                    repStatusMessage = when (reason) {
+                        "depth" -> "Rep not counted: go deeper"
+                        "lockout" -> "Rep not counted: extend fully"
+                        else -> "Rep not counted: improve form"
+                    }
+                    if (voiceFeedbackEnabled) voiceFeedbackManager.announceRepRejected(reason)
+                } else if (uncertain) {
+                    repStatusMessage = "Uncertain rep: tighten form"
+                    if (voiceFeedbackEnabled) voiceFeedbackManager.announceRepUncertain()
+                }
+            }
+
+            previousPhase = phase
 
             val nowTs = System.currentTimeMillis()
 

@@ -254,6 +254,27 @@ class VoiceFeedbackManager(private val context: Context) {
         }
         speak(guidance, flush = false)
     }
+
+    /**
+     * Announce rep rejection reasons
+     */
+    fun announceRepRejected(reason: String? = null) {
+        if (!isInitialized || isMuted) return
+        val msg = when (reason) {
+            "depth" -> "Rep not counted. Go deeper."
+            "lockout" -> "Rep not counted. Extend fully."
+            else -> "Rep not counted."
+        }
+        speak(msg, flush = false)
+    }
+
+    /**
+     * Announce uncertainty in rep counting
+     */
+    fun announceRepUncertain() {
+        if (!isInitialized || isMuted) return
+        speak("Uncertain rep. Improve form.", flush = false)
+    }
 }
 
 /**
