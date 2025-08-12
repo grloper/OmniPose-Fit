@@ -29,6 +29,8 @@ abstract class BaseExerciseDetector(
     // Fixed-size state tracking for form analysis
     protected var lastPrimaryAngle: Float? = null
     
+    private var sensitivityFactor = 1.0f // 1.0 default, >1 easier (fewer confirmations), <1 harder
+    
     /**
      * Template method for pose processing
      * Ensures consistent O(1) behavior across all detectors
@@ -53,9 +55,11 @@ abstract class BaseExerciseDetector(
         
         // Get adaptive threshold based on movement speed
         val confirmationThreshold = velocityTracker.getAdaptiveThreshold()
-        
+        val adjustedThreshold = (confirmationThreshold * (1f / sensitivityFactor))
+            .coerceAtLeast(1f)
+            .toInt()
         // Determine confirmed phase
-        val confirmedPhase = getConfirmedPhase(confirmationThreshold)
+        val confirmedPhase = getConfirmedPhase(adjustedThreshold)
         
         // Count rep if transitioning from DOWN to UP
         var newCount = _state.value.count
@@ -128,6 +132,14 @@ abstract class BaseExerciseDetector(
             downPositionCount >= confirmationThreshold -> ExercisePhase.DOWN
             else -> lastPhase // Keep current phase if not enough confirmations
         }
+    }
+    
+    /**
+     * Set the sensitivity for the detector
+     * @param factor Sensitivity factor (default 1.0, range 0.5 to 1.5)
+     */
+    override fun setSensitivity(factor: Float) {
+        sensitivityFactor = factor.coerceIn(0.5f, 1.5f)
     }
     
     // Abstract methods to be implemented by specific exercise detectors

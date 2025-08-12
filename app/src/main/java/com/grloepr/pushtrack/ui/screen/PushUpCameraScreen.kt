@@ -31,6 +31,9 @@ import com.grloepr.pushtrack.feedback.PostureFeedback
 import com.grloepr.pushtrack.feedback.PostureAnalysisResult
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
+import com.grloepr.pushtrack.detection.ExerciseDetector
+import com.grloepr.pushtrack.detection.ExerciseDetectorFactory
+import com.grloepr.pushtrack.detection.ExercisePhase
 import com.grloepr.pushtrack.detection.ExerciseType
 import com.grloepr.pushtrack.feedback.VoiceFeedbackManager
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
@@ -40,6 +43,7 @@ import com.grloepr.pushtrack.ui.components.EnhancedExerciseCounter
 import com.grloepr.pushtrack.ui.components.PostureFeedbackDisplay
 import com.grloepr.pushtrack.ui.components.VoiceSettingsCard
 import com.grloepr.pushtrack.ui.components.CameraGuidanceCard
+import com.grloepr.pushtrack.ui.components.ExerciseSelectorCard // FIX: added missing import
 import com.grloepr.pushtrack.ui.overlay.EnhancedPoseOverlay
 import kotlinx.coroutines.flow.collect
 
@@ -102,15 +106,34 @@ private fun CameraPreviewScreen() {
     // Voice feedback state
     var voiceFeedbackEnabled by remember { mutableStateOf(true) }
     
+    // Exercise type and detection mode
+    var currentExerciseType by remember { mutableStateOf(ExerciseType.PUSH_UP) }
+    var smartModeEnabled by remember { mutableStateOf(false) }
+    var showExerciseSelector by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var detectionSensitivity by remember { mutableStateOf(1.0f) } // 0.5 – 1.5
+    
     // Initialize pose detection components
     val poseDetectorClient = remember { 
         PoseDetectorClient().apply { initialize() }
     }
     val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
     
-    // Initialize push-up detector (ground position)
-    val pushUpDetector = remember { GroundPositionPushUpDetector() }
-    
+    // Replace ground-only detector with generic detector
+    var detector by remember { mutableStateOf<ExerciseDetector?>(ExerciseDetectorFactory.createDetector(currentExerciseType)) }
+
+    // Recreate detector when exercise type changes (manual or smart)
+    LaunchedEffect(currentExerciseType) {
+        detector = ExerciseDetectorFactory.createDetector(currentExerciseType).also {
+            it.setSensitivity(detectionSensitivity)
+        }
+        repCount = 0
+    }
+    // Apply sensitivity live
+    LaunchedEffect(detectionSensitivity, detector) {
+        detector?.setSensitivity(detectionSensitivity)
+    }
+
     // Initialize posture analyzer
     val postureAnalyzer = remember { PostureAnalyzer() }
     
@@ -126,19 +149,31 @@ private fun CameraPreviewScreen() {
     var previousRepCount by remember { mutableStateOf(0) }
     
     // Collect pose results and process push-ups
-    LaunchedEffect(imageAnalyzer) {
+    LaunchedEffect(imageAnalyzer, smartModeEnabled) {
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
+            val pose = poseResult.pose
 
-            // Process pose (updates internal state)
-            pushUpDetector.processPose(poseResult.pose)
+            if (smartModeEnabled) {
+                val detected = detectExerciseType(pose)
+                if (detected != currentExerciseType) {
+                    currentExerciseType = detected
+                    // detector will recreate via LaunchedEffect
+                }
+            }
 
-            // Retrieve updated count & phase from detector
-            repCount = pushUpDetector.getCurrentCount()
-            val mappedState = mapGroundPhase(pushUpDetector.getCurrentPhase())
+            detector?.processPose(pose)
+
+            repCount = detector?.getRepCount() ?: 0
+            val phase = detector?.getCurrentPhase() ?: ExercisePhase.UP
+            val mappedState = when (phase) {
+                ExercisePhase.UP -> PushUpState.UP_POSITION
+                ExercisePhase.DOWN -> PushUpState.DOWN_POSITION
+                ExercisePhase.TRANSITIONING -> PushUpState.UNKNOWN
+            }
 
             // Posture analysis using mapped state
-            val analysisResult = postureAnalyzer.analyzePose(poseResult.pose, mappedState)
+            val analysisResult = postureAnalyzer.analyzePose(pose, mappedState)
             currentPostureFeedback = analysisResult.feedback
             formQuality = analysisResult.formQuality
             averageFormQuality = analysisResult.averageFormQuality
@@ -205,12 +240,13 @@ private fun CameraPreviewScreen() {
         
         // Enhanced exercise counter with form quality
         EnhancedExerciseCounter(
-            exerciseType = ExerciseType.PUSH_UP,
+            exerciseType = currentExerciseType,
             repCount = repCount,
             formQuality = formQuality,
             averageFormQuality = averageFormQuality,
             hasGoodForm = currentPostureFeedback == PostureFeedback.GOOD_FORM,
-            onReset = { pushUpDetector.reset() },
+            detectionConfidence = 1.0f,
+            onReset = { detector?.reset(); repCount = 0 },
             modifier = Modifier.align(Alignment.TopCenter)
         )
         
@@ -252,18 +288,80 @@ private fun CameraPreviewScreen() {
             )
         }
         
-        // Camera controls and settings
+        // Exercise selector toggle button (floating small)
+        FloatingActionButton(
+            onClick = { showExerciseSelector = !showExerciseSelector },
+            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+            containerColor = Color(0xFF4ECCA3),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.FitnessCenter,
+                contentDescription = "Exercise",
+                tint = Color.White
+            )
+        }
+
+        // Settings button (separate)
+        FloatingActionButton(
+            onClick = { showSettings = !showSettings },
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+            containerColor = Color(0xFF424255),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = "Settings",
+                tint = Color.White
+            )
+        }
+
+        // Exercise selector panel
+        if (showExerciseSelector) {
+            ExerciseSelectorCard(
+                currentExerciseType = currentExerciseType,
+                smartModeEnabled = smartModeEnabled,
+                onExerciseSelected = {
+                    currentExerciseType = it
+                    smartModeEnabled = false
+                    showExerciseSelector = false
+                },
+                onSmartModeToggle = { enabled ->
+                    smartModeEnabled = enabled
+                    if (enabled) showExerciseSelector = false
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .width(280.dp)
+            )
+        }
+
+        // Settings panel
+        if (showSettings) {
+            SettingsPanel(
+                voiceEnabled = voiceFeedbackEnabled,
+                onVoiceToggle = { voiceFeedbackEnabled = it },
+                debugEnabled = showDebugInfo,
+                onDebugToggle = { showDebugInfo = it },
+                postureEnabled = true,
+                onSensitivityChange = { detectionSensitivity = it },
+                sensitivity = detectionSensitivity,
+                onClose = { showSettings = false },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+            )
+        }
+
+        // Update existing CameraControls callbacks
         CameraControls(
-            onCameraSwitch = { 
-                cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
-                    CameraSelector.DEFAULT_FRONT_CAMERA
-                } else {
-                    CameraSelector.DEFAULT_BACK_CAMERA
-                }
+            onCameraSwitch = {
+                cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA)
+                    CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
             },
-            onSettingsToggle = { /* No-op */ },
-            onExerciseSelectorToggle = { /* No-op */ },
-            onShowSummary = { /* No-op */ },
+            onSettingsToggle = { showSettings = !showSettings },
+            onExerciseSelectorToggle = { showExerciseSelector = !showExerciseSelector },
+            onShowSummary = { /* TODO */ },
             hasReps = repCount > 0,
             modifier = Modifier.align(Alignment.BottomEnd)
         )
@@ -347,6 +445,105 @@ private fun CameraControls(
     }
 }
 
+// Settings bottom panel
+@Composable
+private fun SettingsPanel(
+    voiceEnabled: Boolean,
+    onVoiceToggle: (Boolean) -> Unit,
+    debugEnabled: Boolean,
+    onDebugToggle: (Boolean) -> Unit,
+    postureEnabled: Boolean,
+    sensitivity: Float,
+    onSensitivityChange: (Float) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.padding(8.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E28))
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Settings", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Default.Close, null, tint = Color.White)
+                }
+            }
+            SettingToggleRow(
+                title = "Voice Feedback",
+                checked = voiceEnabled,
+                onChecked = onVoiceToggle,
+                icon = if (voiceEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff
+            )
+            SettingToggleRow(
+                title = "Debug Overlay",
+                checked = debugEnabled,
+                onChecked = onDebugToggle,
+                icon = Icons.Default.BugReport
+            )
+            SettingToggleRow(
+                title = "Posture Analysis",
+                checked = postureEnabled,
+                onChecked = { /* stub – posture always on for now */ },
+                enabled = false,
+                icon = Icons.Default.Visibility
+            )
+            Column {
+                Text("Detection Sensitivity", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Slider(
+                    value = sensitivity,
+                    onValueChange = onSensitivityChange,
+                    valueRange = 0.5f..1.5f,
+                    steps = 9,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFF4ECCA3),
+                        activeTrackColor = Color(0xFF4ECCA3)
+                    )
+                )
+                Text(
+                    text = String.format("%.2f", sensitivity),
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingToggleRow(
+    title: String,
+    checked: Boolean,
+    onChecked: (Boolean) -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean = true
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(icon, null, tint = if (enabled) Color(0xFF4ECCA3) else Color.Gray)
+            Text(title, color = if (enabled) Color.White else Color.Gray, fontSize = 14.sp)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = if (enabled) onChecked else null,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFF4ECCA3),
+                checkedTrackColor = Color(0xFF4ECCA3).copy(alpha = 0.5f)
+            ),
+            enabled = enabled
+        )
+    }
+}
+
 /**
  * Smart auto-detection of exercise type based on pose analysis
  * This analyzes body position and movement patterns to determine the most likely exercise
@@ -411,11 +608,4 @@ private fun detectExerciseType(pose: Pose): ExerciseType {
     
     // Default to push-up if no clear pattern is detected
     return ExerciseType.PUSH_UP
-}
-
-// Map GroundPositionPushUpDetector phase to analysis PushUpState
-private fun mapGroundPhase(phase: PushUpPhase): PushUpState = when (phase) {
-    PushUpPhase.UP -> PushUpState.UP_POSITION
-    PushUpPhase.DOWN -> PushUpState.DOWN_POSITION
-    PushUpPhase.TRANSITIONING -> PushUpState.UNKNOWN
 }

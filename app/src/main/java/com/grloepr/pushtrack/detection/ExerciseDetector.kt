@@ -39,6 +39,11 @@ interface ExerciseDetector {
      * Get current exercise phase
      */
     fun getCurrentPhase(): ExercisePhase
+
+    /**
+     * Adjust detection sensitivity (1.0 = default). Lower -> stricter, Higher -> more permissive.
+     */
+    fun setSensitivity(factor: Float)
 }
 
 /**
