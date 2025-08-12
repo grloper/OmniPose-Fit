@@ -17,3 +17,5 @@ local.properties
 # ML Kit and pose detection temp files
 *.tmp
 /tmp/
+# .idea
+/.idea/*

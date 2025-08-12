@@ -99,3 +99,40 @@ When the app runs:
 - CameraX ImageAnalysis
 - Kotlin Coroutines
 - Jetpack Compose
+
+## Extending With Good vs Bad Form Classification
+
+ML Kit's pose detector itself is NOT user-trainable. To classify good/bad form:
+1. Data Capture
+   - Record sessions and export landmark coordinates (x,y, likelihood) per frame.
+   - Derive features: joint angles (elbow, knee, hip, shoulder), symmetry deltas, normalized distances (e.g. wrist–shoulder / torso length), velocity of primary angles.
+   - Store as CSV rows: exercise_type, label(good|bad|issue_type), feature1..N.
+2. Labeling Strategy
+   - Good: full ROM, neutral spine, symmetric angles (< threshold difference).
+   - Bad categories: shallow_depth, incomplete_lockout, asymmetry, arch_back, knees_valgus.
+3. Feature Engineering (all O(1)):
+   - Elbow angle, min elbow angle per rep, lockout angle.
+   - Range of motion percentage: (maxAngle - minAngle) / maxAngle.
+   - Spine alignment score (already computed).
+   - Angle symmetry |left-right|.
+   - Temporal smoothness: abs diff of angle between consecutive frames.
+4. Model Training (off-device):
+   - Train a lightweight classifier (e.g. Gradient Boosted Trees or small MLP) on features.
+   - Export to TensorFlow Lite (if neural) or embed rule thresholds.
+5. On-Device Integration:
+   - For each completed rep aggregate rep-level features, feed into TFLite model.
+   - Return classification + confidence; map to PostureFeedback.
+6. Continual Improvement:
+   - Log misclassified reps locally (with consent) to refine dataset.
+
+## Confidence + Visibility Gating
+Added runtime gating:
+- Require ≥12 high-confidence landmarks and core upper body landmarks.
+- Exercise-specific visibility rules (wrists above head for pull-ups, full legs for squats).
+- Detection & counting disabled until gating satisfied.
+- Voice suppressed when not fully visible.
+
+## Best Practices
+- Keep feature set small and invariant to scale (normalize by torso length or shoulder width).
+- Clamp angles and sanitize likelihood < threshold.
+- Avoid per-frame classification noise: classify per rep summary.

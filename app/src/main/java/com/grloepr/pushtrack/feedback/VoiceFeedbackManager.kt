@@ -4,7 +4,9 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
-import android.os.Bundle // Added import
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import java.util.*
 
 /**
@@ -24,6 +26,14 @@ class VoiceFeedbackManager(private val context: Context) {
     private var speechRate = 1.0f
     private var pitchRate = 1.0f
     private var volume = 1.0f
+
+    // Add handler for timed sequences
+    private val handler = Handler(Looper.getMainLooper())
+
+    // Add throttling for visibility messages
+    private var lastVisibilityMessage: String? = null
+    private var lastVisibilityMessageTime = 0L
+    private val visibilityThrottleMs = 3000L
 
     init {
         initTTS()
@@ -63,20 +73,107 @@ class VoiceFeedbackManager(private val context: Context) {
         })
     }
 
+    // Internal speak with queue mode
+    private fun speakInternal(message: String, flush: Boolean = false) {
+        if (!isInitialized || isMuted) return
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume)
+        }
+        tts?.speak(
+            message,
+            if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
+            params,
+            "FeedbackMsg_${System.currentTimeMillis()}"
+        )
+    }
+
+    // Unified speak (flush optional)
+    private fun speak(message: String, flush: Boolean = true) {
+        if (!isInitialized || isMuted) return
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume)
+        }
+        tts?.speak(
+            message,
+            if (flush) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
+            params,
+            "Feedback_${System.currentTimeMillis()}"
+        )
+    }
+
+    /**
+     * Countdown + detected exercise announcement (Smart Mode)
+     */
+    fun announceExerciseDetectionCountdown(exerciseName: String) {
+        if (!isInitialized || isMuted) return
+        speak("Three", flush = true)
+        speak("Two", flush = false)
+        speak("One", flush = false)
+        speak("Detected $exerciseName workout", flush = false)
+    }
+
+    /**
+     * Announce exercise introduction with tips
+     */
+    fun announceExerciseIntro(exerciseName: String) {
+        if (!isInitialized || isMuted) return
+        val tip = when (exerciseName.lowercase()) {
+            "push up" -> "Keep a straight line from shoulders to heels."
+            "pull up" -> "Engage your core, no swinging."
+            "squat" -> "Chest up, knees tracking over toes."
+            else -> ""
+        }
+        speak("$exerciseName mode. $tip", flush = false)
+    }
+
     /**
      * Announce the current rep count
      */
-    fun announceRepCount(count: Int) {
+    fun announceRepCount(count: Int) { // override earlier version
         if (!isInitialized || isMuted || count <= lastAnnouncedCount) return
-
-        val message = when {
-            count % 10 == 0 -> "$count! Great job, keep pushing!"
-            count % 5 == 0 -> "$count! You're doing well!"
-            else -> "$count"
-        }
-
-        speak(message)
+        val message = count.toString()
+        speak(message, flush = false)
         lastAnnouncedCount = count
+    }
+
+    /**
+     * Encourage every 5 reps (called externally after announceRepCount if desired)
+     */
+    fun maybeEncourage(count: Int) {
+        if (!isInitialized || isMuted) return
+        if (count > 0 && count % 5 == 0) {
+            speak(when (count) {
+                5 -> "Good start"
+                10 -> "Nice pace"
+                15 -> "Keep it up"
+                20 -> "Great work"
+                else -> "Strong"
+            }, flush = false)
+        }
+    }
+
+    // Posture feedback (positive / corrective)
+    /**
+     * Provide feedback about posture issues
+     */
+    fun providePostureFeedback(feedback: PostureFeedback?, formQuality: Float) {
+        if (!isInitialized || isMuted || feedback == null) return
+        val now = System.currentTimeMillis()
+        if (feedback == lastPostureFeedback && now - lastPostureFeedbackTime < postureFeedbackThrottleMs) return
+        val msg = when (feedback) {
+            PostureFeedback.STRAIGHTEN_BACK -> "Straighten your back"
+            PostureFeedback.LOWER_BODY -> "Lower more"
+            PostureFeedback.RAISE_BODY -> "Extend fully"
+            PostureFeedback.ALIGN_HANDS -> "Align your hands"
+            PostureFeedback.GOOD_FORM -> if (formQuality >= 90) "Great form" else null
+            PostureFeedback.SLOW_DOWN -> "Slow controlled reps"
+            PostureFeedback.KEEP_GOING -> "Keep going"
+        }
+        msg?.let {
+            speak(it, flush = false)
+            lastPostureFeedback = feedback
+            lastPostureFeedbackTime = now
+        }
     }
 
     /**
@@ -86,38 +183,6 @@ class VoiceFeedbackManager(private val context: Context) {
         lastAnnouncedCount = 0
         lastPostureFeedback = null
         lastPostureFeedbackTime = 0L
-    }
-
-    /**
-     * Provide feedback about posture issues
-     */
-    fun providePostureFeedback(feedback: PostureFeedback?, formQuality: Float) {
-        if (!isInitialized || isMuted || feedback == null) return
-        
-        // Don't repeat the same feedback too frequently
-        if (feedback == lastPostureFeedback) {
-            val now = System.currentTimeMillis()
-            if (now - lastPostureFeedbackTime < postureFeedbackThrottleMs) {
-                return
-            }
-        }
-
-        val message = when (feedback) {
-            PostureFeedback.STRAIGHTEN_BACK -> "Keep your back straight"
-            PostureFeedback.LOWER_BODY -> "Go lower"
-            PostureFeedback.RAISE_BODY -> "Push all the way up"
-            PostureFeedback.ALIGN_HANDS -> "Keep your hands aligned"
-            PostureFeedback.GOOD_FORM -> {
-                if (formQuality >= 95) "Perfect form!" else null
-            }
-            else -> null
-        }
-
-        message?.let {
-            speak(it)
-            lastPostureFeedback = feedback
-            lastPostureFeedbackTime = System.currentTimeMillis()
-        }
     }
 
     /**
@@ -139,18 +204,6 @@ class VoiceFeedbackManager(private val context: Context) {
     }
 
     /**
-     * Speak a message with configured settings
-     */
-    private fun speak(message: String) {
-        if (!isInitialized || isMuted) return
-
-        val params = Bundle().apply {
-            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume)
-        }
-        tts?.speak(message, TextToSpeech.QUEUE_FLUSH, params, "FeedbackMsg_${System.currentTimeMillis()}")
-    }
-
-    /**
      * Cleanup TTS resources
      */
     fun shutdown() {
@@ -158,6 +211,48 @@ class VoiceFeedbackManager(private val context: Context) {
         tts?.stop()
         tts?.shutdown()
         tts = null
+    }
+
+    /**
+     * Safe announce rep count (no-op if not tracking)
+     */
+    fun safeAnnounceRep(count: Int, tracking: Boolean) {
+        if (!tracking) return
+        announceRepCount(count)
+    }
+
+    /**
+     * Announce calibration completion
+     */
+    fun announceCalibrationComplete(exerciseName: String) {
+        speak("$exerciseName calibrated", flush = false)
+    }
+
+    /**
+     * Announce visibility/positioning guidance
+     */
+    fun announceVisibilityGuidance(message: String) {
+        if (!isInitialized || isMuted) return
+        val now = System.currentTimeMillis()
+        if (message == lastVisibilityMessage && now - lastVisibilityMessageTime < visibilityThrottleMs) return
+
+        speak(message, flush = true)
+        lastVisibilityMessage = message
+        lastVisibilityMessageTime = now
+    }
+
+    /**
+     * Announce positioning guidance for specific exercises
+     */
+    fun announcePositioningGuidance(exerciseType: String) {
+        if (!isInitialized || isMuted) return
+        val guidance = when (exerciseType.lowercase()) {
+            "push_up", "push up" -> "Position camera above you. Look at the ground during push-ups."
+            "pull_up", "pull up" -> "Position camera in front. Hang from bar with arms extended."
+            "squat" -> "Position camera in front. Stand upright to begin."
+            else -> "Position yourself in the camera frame."
+        }
+        speak(guidance, flush = false)
     }
 }
 

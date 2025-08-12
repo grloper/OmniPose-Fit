@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.grloepr.pushtrack.detection.ExerciseType
 import com.grloepr.pushtrack.detection.ExerciseDetectorFactory
 import kotlinx.coroutines.delay
+import androidx.compose.ui.platform.LocalConfiguration
 
 /**
  * Enhanced exercise counter with animations and form quality indicator (supports any exercise type)
@@ -35,13 +36,18 @@ import kotlinx.coroutines.delay
 fun EnhancedExerciseCounter(
     exerciseType: ExerciseType,
     repCount: Int,
-    formQuality: Float, // 0-100
+    formQuality: Float,
     averageFormQuality: Float,
     hasGoodForm: Boolean,
-    detectionConfidence: Float = 0f, // 0-1
+    detectionConfidence: Float = 0f,
     onReset: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean = false // NEW
 ) {
+    // Auto-compact if device height < 700dp
+    val autoCompact = LocalConfiguration.current.screenHeightDp < 700
+    val useCompact = compact || autoCompact
+
     var animatedCount by remember { mutableStateOf(0) }
     var animatedQuality by remember { mutableStateOf(0f) }
     
@@ -72,99 +78,117 @@ fun EnhancedExerciseCounter(
     }
     
     Card(
-        modifier = modifier.padding(16.dp),
-        shape = RoundedCornerShape(20.dp),
+        modifier = modifier
+            .padding(if (useCompact) 4.dp else 8.dp)
+            .widthIn(max = if (useCompact) 200.dp else 260.dp),
+        shape = RoundedCornerShape(if (useCompact) 12.dp else 16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.Black.copy(alpha = 0.8f)
+            containerColor = Color.Black.copy(alpha = if (useCompact) 0.55f else 0.65f)
         ),
-        elevation = CardDefaults.cardElevation(8.dp)
+        elevation = CardDefaults.cardElevation(if (useCompact) 2.dp else 4.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(if (useCompact) 8.dp else 14.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Exercise type indicator
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (useCompact) 4.dp else 8.dp)
             ) {
                 Icon(
                     imageVector = getExerciseIcon(exerciseType),
                     contentDescription = null,
                     tint = Color(0xFF4ECCA3),
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(if (useCompact) 18.dp else 24.dp)
                 )
                 Text(
                     text = ExerciseDetectorFactory.getDisplayName(exerciseType),
                     color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = if (useCompact) 14.sp else 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
                 )
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
+
+            Spacer(modifier = Modifier.height(if (useCompact) 4.dp else 8.dp))
+
             // Animated rep counter
             Row(
                 verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     text = "$animatedCount",
                     color = if (hasGoodForm) Color(0xFF4ECCA3) else Color.White,
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = if (useCompact) 30.sp else 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
                 )
                 Text(
                     text = if (animatedCount == 1) "REP" else "REPS",
                     color = Color.Gray,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    fontSize = if (useCompact) 10.sp else 12.sp,
+                    modifier = Modifier.padding(bottom = if (useCompact) 4.dp else 6.dp)
                 )
             }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
+            // Inline minimal tip
+            Text(
+                text = when (exerciseType) {
+                    ExerciseType.PUSH_UP -> "Straight line"
+                    ExerciseType.PULL_UP -> "Full hang"
+                    ExerciseType.SQUAT -> "Chest up"
+                },
+                color = Color(0xFFAAAAAA),
+                fontSize = if (useCompact) 9.sp else 10.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+
+            Spacer(modifier = Modifier.height(if (useCompact) 4.dp else 8.dp))
+
             // Detection confidence indicator
-            if (detectionConfidence > 0f) {
+            if (detectionConfidence > 0f && !useCompact) {
                 DetectionConfidenceIndicator(
                     confidence = detectionConfidence,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
             }
-            
+
             // Form quality indicator
             FormQualityIndicator(
                 quality = animatedQuality,
                 averageQuality = averageFormQuality,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
             )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
+
+            Spacer(modifier = Modifier.height(if (useCompact) 6.dp else 10.dp))
+
             // Controls row
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Reset button
-                Button(
+                OutlinedButton(
                     onClick = onReset,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Red.copy(alpha = 0.8f)
+                    contentPadding = PaddingValues(
+                        horizontal = if (useCompact) 8.dp else 12.dp,
+                        vertical = if (useCompact) 4.dp else 6.dp
                     ),
-                    modifier = Modifier.height(40.dp)
+                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp),
+                    modifier = Modifier.height(if (useCompact) 30.dp else 34.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Reset",
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(if (useCompact) 14.dp else 16.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Reset", color = Color.White, fontSize = 14.sp)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Reset", fontSize = if (useCompact) 10.sp else 12.sp, color = Color.White)
                 }
             }
         }
@@ -276,7 +300,7 @@ private fun FormQualityIndicator(
                     imageVector = if (index < starRating) Icons.Default.Star else Icons.Default.StarBorder,
                     contentDescription = null,
                     tint = if (index < starRating) Color(0xFFFFD700) else Color.Gray,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
@@ -301,15 +325,15 @@ private fun FormQualityIndicator(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
                 .background(Color.Gray.copy(alpha = 0.3f))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(quality / 100f)
-                    .clip(RoundedCornerShape(3.dp))
+                    .clip(RoundedCornerShape(2.dp))
                     .background(
                         when {
                             quality >= 75 -> Color(0xFF4ECCA3)
@@ -435,36 +459,38 @@ fun PostureFeedbackDisplay(
 ) {
     AnimatedVisibility(
         visible = feedbackMessage != null,
-        enter = slideInVertically() + fadeIn(),
-        exit = slideOutVertically() + fadeOut()
+        enter = fadeIn() + scaleIn(),
+        exit = fadeOut() + scaleOut()
     ) {
-        feedbackMessage?.let { message ->
+        feedbackMessage?.let { msg ->
             Card(
-                modifier = modifier.padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(12.dp),
+                modifier = modifier
+                    .padding(horizontal = 8.dp)
+                    .defaultMinSize(minHeight = 28.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (isGoodForm) 
-                        Color(0xFF4ECCA3).copy(alpha = 0.9f) 
-                    else 
-                        Color(0xFFFF6B6B).copy(alpha = 0.9f)
-                )
+                    containerColor = (if (isGoodForm) Color(0xFF4ECCA3) else Color(0xFFFF6B6B))
+                        .copy(alpha = 0.85f)
+                ),
+                elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
                         imageVector = if (isGoodForm) Icons.Default.CheckCircle else Icons.Default.Info,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                     Text(
-                        text = message,
+                        text = msg,
                         color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
                     )
                 }
             }

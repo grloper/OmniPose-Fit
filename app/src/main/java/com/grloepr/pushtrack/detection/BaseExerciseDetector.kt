@@ -1,10 +1,12 @@
 package com.grloepr.pushtrack.detection
 
 import com.google.mlkit.vision.pose.Pose
+import com.google.mlkit.vision.pose.PoseLandmark
 import com.grloepr.pushtrack.detection.utils.VelocityTracker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.max
 
 /**
  * Abstract base class for exercise detectors
@@ -31,13 +33,28 @@ abstract class BaseExerciseDetector(
     
     private var sensitivityFactor = 1.0f // 1.0 default, >1 easier (fewer confirmations), <1 harder
     
+    // Enhanced smoothing
+    private var smoothedPrimaryAngle: Float? = null
+    private val smoothingAlpha = 0.3f // More aggressive smoothing
+    
     /**
      * Template method for pose processing
      * Ensures consistent O(1) behavior across all detectors
      */
     final override fun processPose(pose: Pose) {
+        // Visibility gating: require minimum reliable landmarks
+        if (!hasSufficientLandmarks(pose)) {
+            _state.value = _state.value.copy(isTracking = false, confidence = 0f)
+            return
+        }
+        
         // Calculate primary angle for this exercise type
-        val primaryAngle = calculatePrimaryAngle(pose)
+        val primaryAngleRaw = calculatePrimaryAngle(pose)
+        val primaryAngle = primaryAngleRaw?.let { raw ->
+            smoothedPrimaryAngle = if (smoothedPrimaryAngle == null) raw
+            else (smoothingAlpha * raw + (1 - smoothingAlpha) * smoothedPrimaryAngle!!)
+            smoothedPrimaryAngle
+        }
         
         // Track velocity if we have angle data
         primaryAngle?.let { angle ->
@@ -53,13 +70,10 @@ abstract class BaseExerciseDetector(
         // Update position counts for state confirmation
         updatePositionCounts(detectedPhase)
         
-        // Get adaptive threshold based on movement speed
-        val confirmationThreshold = velocityTracker.getAdaptiveThreshold()
-        val adjustedThreshold = (confirmationThreshold * (1f / sensitivityFactor))
-            .coerceAtLeast(1f)
-            .toInt()
+        // More responsive threshold
+        val confirmationThreshold = max(1, velocityTracker.getAdaptiveThreshold() - 1)
         // Determine confirmed phase
-        val confirmedPhase = getConfirmedPhase(adjustedThreshold)
+        val confirmedPhase = getConfirmedPhase(confirmationThreshold)
         
         // Count rep if transitioning from DOWN to UP
         var newCount = _state.value.count
@@ -69,6 +83,7 @@ abstract class BaseExerciseDetector(
         
         // Update last phase
         lastPhase = confirmedPhase
+        lastPrimaryAngle = primaryAngle
         
         // Update state
         _state.value = ExerciseState(
@@ -90,6 +105,7 @@ abstract class BaseExerciseDetector(
         downPositionCount = 0
         velocityTracker.reset()
         lastPrimaryAngle = null
+        smoothedPrimaryAngle = null
         _state.value = ExerciseState()
     }
     
@@ -172,4 +188,19 @@ abstract class BaseExerciseDetector(
      * @return String describing the detection method
      */
     abstract fun getDetectionMethod(): String
+
+    private fun hasSufficientLandmarks(pose: Pose): Boolean {
+        val all = pose.allPoseLandmarks
+        if (all.isEmpty()) return false
+        val highConf = all.count { it.inFrameLikelihood >= 0.6f }
+        if (highConf < 12) return false
+        // Core upper body
+        val coreIds = listOf(
+            PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+            PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+            PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST,
+            PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP
+        )
+        return coreIds.all { id -> pose.getPoseLandmark(id)?.inFrameLikelihood ?: 0f >= 0.6f }
+    }
 }

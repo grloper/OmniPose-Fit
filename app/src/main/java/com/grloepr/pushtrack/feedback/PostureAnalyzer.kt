@@ -18,6 +18,11 @@ class PostureAnalyzer {
     private var lastFeedbackTime = 0L
     private val feedbackCooldownMs = 3000L // 3 seconds between feedback
     
+    // Dynamic thresholds for depth detection
+    private var observedMinElbowAngle = 999f
+    private var observedMaxElbowAngle = 0f
+    private val depthTargetRatio = 0.55f // require reaching 55% of observed ROM
+    
     /**
      * Analyze pose and return posture feedback
      */
@@ -108,23 +113,26 @@ class PostureAnalyzer {
         )
         
         val avgArmAngle = when {
-            leftArmAngle != null && rightArmAngle != null -> (leftArmAngle + rightArmAngle) / 2
+            leftArmAngle != null && rightArmAngle != null -> (leftArmAngle + rightArmAngle) / 2f
             leftArmAngle != null -> leftArmAngle
-            rightArmAngle != null -> rightArmAngle
-            else -> null
+            else -> rightArmAngle
         }
-        
+
         avgArmAngle?.let { angle ->
+            // Track ROM extremes over session
+            if (angle < observedMinElbowAngle) observedMinElbowAngle = angle
+            if (angle > observedMaxElbowAngle) observedMaxElbowAngle = angle
+
+            val rom = (observedMaxElbowAngle - observedMinElbowAngle).coerceAtLeast(1f)
+            val depthRatio = (observedMaxElbowAngle - angle) / rom
+
             when (currentState) {
                 PushUpState.DOWN_POSITION -> {
-                    if (angle > 110) { // Not low enough
-                        return PostureFeedback.LOWER_BODY
-                    }
+                    // require adequate depth based on personal ROM
+                    if (depthRatio < depthTargetRatio) return PostureFeedback.LOWER_BODY
                 }
                 PushUpState.UP_POSITION -> {
-                    if (angle < 140) { // Not high enough
-                        return PostureFeedback.RAISE_BODY
-                    }
+                    if (angle < (observedMaxElbowAngle - 0.15f * rom)) return PostureFeedback.RAISE_BODY
                 }
                 else -> {}
             }

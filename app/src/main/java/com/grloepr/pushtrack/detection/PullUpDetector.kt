@@ -4,6 +4,7 @@ import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 import com.grloepr.pushtrack.detection.utils.AngleCalculator
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Modular pull-up detector with O(1) complexity
@@ -19,6 +20,13 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
     private val headHandsUpThreshold = 100f    // Head is below hands (hanging)
     private val headHandsDownThreshold = 30f   // Head is close to hands (pulled up)
     
+    // Calibration and adaptive detection variables
+    private var hangElbowBaseline: Float? = null
+    private var upElbowBaseline: Float? = null
+    private var hangHeadHandBaseline: Float? = null
+    private var calibrationStable = 0
+    private val calibrationFrames = 30
+    
     /**
      * Calculate primary angle (average elbow angle) for pull-up detection
      */
@@ -30,70 +38,79 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
      * Determine pull-up phase using both elbow angle and head position
      */
     override fun determinePhase(pose: Pose, primaryAngle: Float?): ExercisePhase {
-        // Primary detection using elbow angle
+        val headHandDist = calculateHeadToHandsDistance(pose)
+        
+        // Enhanced calibration
+        if (primaryAngle != null && headHandDist != null) {
+            calibrateHangPosition(primaryAngle, headHandDist)
+        }
+        
+        // Use ratio-based detection if calibrated
+        val calibratedPhase = if (hangElbowBaseline != null && primaryAngle != null) {
+            val contractionRatio = primaryAngle / hangElbowBaseline!!
+            when {
+                contractionRatio <= 0.45f -> ExercisePhase.UP      // Highly contracted
+                contractionRatio >= 0.85f -> ExercisePhase.DOWN    // Near full hang
+                else -> ExercisePhase.TRANSITIONING
+            }
+        } else null
+        
+        // Fallback to fixed thresholds
         val anglePhase = if (primaryAngle != null) {
             when {
-                primaryAngle < downThreshold -> ExercisePhase.UP   // Arms bent = pulled up
-                primaryAngle > upThreshold -> ExercisePhase.DOWN  // Arms extended = hanging
+                primaryAngle < 70f -> ExercisePhase.UP    // More sensitive up detection
+                primaryAngle > 130f -> ExercisePhase.DOWN // More sensitive down detection
                 else -> ExercisePhase.TRANSITIONING
             }
-        } else {
-            ExercisePhase.TRANSITIONING
-        }
+        } else ExercisePhase.TRANSITIONING
         
-        // Secondary validation using head-to-hands distance
-        val headHandsDistance = calculateHeadToHandsDistance(pose)
-        val distancePhase = if (headHandsDistance != null) {
-            when {
-                headHandsDistance < headHandsDownThreshold -> ExercisePhase.UP   // Head close to hands
-                headHandsDistance > headHandsUpThreshold -> ExercisePhase.DOWN  // Head far from hands
-                else -> ExercisePhase.TRANSITIONING
+        return calibratedPhase ?: anglePhase
+    }
+    
+    private fun calibrateHangPosition(elbowAngle: Float, headHandDist: Float) {
+        // Look for stable hanging position (extended arms)
+        if (elbowAngle > 120f && elbowAngle < 180f) {
+            calibrationStable++
+            if (calibrationStable >= calibrationFrames) {
+                hangElbowBaseline = elbowAngle
+                hangHeadHandBaseline = headHandDist
+                calibrationStable = 0
             }
+        } else if (elbowAngle < 80f && hangElbowBaseline != null) {
+            // Calibrate contracted position
+            upElbowBaseline = elbowAngle
         } else {
-            ExercisePhase.TRANSITIONING
+            calibrationStable = max(0, calibrationStable - 1)
         }
-        
-        // Use angle detection if available, otherwise fall back to distance
-        return if (primaryAngle != null) anglePhase else distancePhase
     }
     
     /**
      * Calculate confidence based on angle reliability and landmark visibility
      */
     override fun calculateConfidence(pose: Pose, primaryAngle: Float?): Float {
-        var confidence = 0f
+        var conf = 0f
         var factors = 0
         
-        // Confidence from angle detection
         if (primaryAngle != null) {
-            confidence += 0.8f
+            conf += 0.8f
             factors++
         }
         
-        // Confidence from head-hands distance
-        val headHandsDistance = calculateHeadToHandsDistance(pose)
-        if (headHandsDistance != null) {
-            confidence += 0.6f
+        if (hangElbowBaseline != null) {
+            conf += 0.2f // Calibration bonus
             factors++
         }
         
-        // Average confidence from available factors
-        if (factors > 0) {
-            confidence /= factors
+        // Check wrist visibility (important for pull-ups)
+        val leftWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
+        val rightWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
+        if (leftWrist?.inFrameLikelihood ?: 0f > 0.6f && 
+            rightWrist?.inFrameLikelihood ?: 0f > 0.6f) {
+            conf += 0.2f
+            factors++
         }
         
-        // Boost confidence for fast movements
-        val avgVelocity = velocityTracker.getAverageVelocity()
-        confidence += (avgVelocity / 50f).coerceIn(0f, 0.2f)
-        
-        // Check if both arms are visible for better confidence
-        val leftElbow = AngleCalculator.calculateElbowAngle(pose, true)
-        val rightElbow = AngleCalculator.calculateElbowAngle(pose, false)
-        if (leftElbow != null && rightElbow != null) {
-            confidence += 0.1f
-        }
-        
-        return confidence.coerceIn(0f, 1f)
+        return if (factors > 0) (conf / factors).coerceIn(0f, 1f) else 0f
     }
     
     /**
@@ -130,5 +147,16 @@ class PullUpDetector : BaseExerciseDetector(ExerciseType.PULL_UP) {
         } else {
             "head_hands_distance"
         }
+    }
+    
+    /**
+     * Reset detector state
+     */
+    override fun reset() {
+        super.reset()
+        hangElbowBaseline = null
+        upElbowBaseline = null
+        hangHeadHandBaseline = null
+        calibrationStable = 0
     }
 }

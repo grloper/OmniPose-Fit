@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +47,9 @@ import com.grloepr.pushtrack.ui.components.CameraGuidanceCard
 import com.grloepr.pushtrack.ui.components.ExerciseSelectorCard // FIX: added missing import
 import com.grloepr.pushtrack.ui.overlay.EnhancedPoseOverlay
 import kotlinx.coroutines.flow.collect
+import kotlin.math.abs
+import kotlin.math.min
+import androidx.compose.foundation.text.BasicText
 
 // Extension function to convert PoseDetectionResult to PoseFrameResult
 fun PoseDetectionResult.toPoseFrameResult(
@@ -111,7 +115,7 @@ private fun CameraPreviewScreen() {
     var smartModeEnabled by remember { mutableStateOf(false) }
     var showExerciseSelector by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var detectionSensitivity by remember { mutableStateOf(1.0f) } // 0.5 – 1.5
+    // var detectionSensitivity by remember { mutableStateOf(1.0f) } // 0.5 – 1.5
     
     // Initialize pose detection components
     val poseDetectorClient = remember { 
@@ -125,14 +129,14 @@ private fun CameraPreviewScreen() {
     // Recreate detector when exercise type changes (manual or smart)
     LaunchedEffect(currentExerciseType) {
         detector = ExerciseDetectorFactory.createDetector(currentExerciseType).also {
-            it.setSensitivity(detectionSensitivity)
+            // it.setSensitivity(detectionSensitivity)
         }
         repCount = 0
     }
     // Apply sensitivity live
-    LaunchedEffect(detectionSensitivity, detector) {
-        detector?.setSensitivity(detectionSensitivity)
-    }
+    // LaunchedEffect(detectionSensitivity, detector) {
+    //     detector?.setSensitivity(detectionSensitivity)
+    // }
 
     // Initialize posture analyzer
     val postureAnalyzer = remember { PostureAnalyzer() }
@@ -148,51 +152,25 @@ private fun CameraPreviewScreen() {
     // Previous rep count for voice feedback
     var previousRepCount by remember { mutableStateOf(0) }
     
-    // Collect pose results and process push-ups
-    LaunchedEffect(imageAnalyzer, smartModeEnabled) {
-        imageAnalyzer.poseResults.collect { poseResult ->
-            currentPoseResult = poseResult
-            val pose = poseResult.pose
+    // New state variables
+    var lastAnnouncedExercise by remember { mutableStateOf<ExerciseType?>(null) } // ADDED
+    var guidanceVisible by remember { mutableStateOf(false) } // ADDED
+    var stableCandidate by remember { mutableStateOf<ExerciseType?>(null) }
+    var candidateStableFrames by remember { mutableStateOf(0) }
+    var lastSwitchTime by remember { mutableStateOf(0L) }
+    var lastRepOrMovementTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    var lastPrimaryAngleSnapshot by remember { mutableStateOf<Float?>(null) }
+    val smartSwitchCooldownMs = 5000L
+    val stabilityFramesRequired = 25 // ~0.5s at 50fps
+    // ADDED: lift visibility tracking states to outer scope
+    var fullyVisible by remember { mutableStateOf(false) }
+    var visibilityHint by remember { mutableStateOf<String?>(null) }
 
-            if (smartModeEnabled) {
-                val detected = detectExerciseType(pose)
-                if (detected != currentExerciseType) {
-                    currentExerciseType = detected
-                    // detector will recreate via LaunchedEffect
-                }
-            }
-
-            detector?.processPose(pose)
-
-            repCount = detector?.getRepCount() ?: 0
-            val phase = detector?.getCurrentPhase() ?: ExercisePhase.UP
-            val mappedState = when (phase) {
-                ExercisePhase.UP -> PushUpState.UP_POSITION
-                ExercisePhase.DOWN -> PushUpState.DOWN_POSITION
-                ExercisePhase.TRANSITIONING -> PushUpState.UNKNOWN
-            }
-
-            // Posture analysis using mapped state
-            val analysisResult = postureAnalyzer.analyzePose(pose, mappedState)
-            currentPostureFeedback = analysisResult.feedback
-            formQuality = analysisResult.formQuality
-            averageFormQuality = analysisResult.averageFormQuality
-            
-            // Handle voice feedback
-            if (voiceFeedbackEnabled) {
-                // Announce count when it changes
-                if (repCount > previousRepCount) {
-                    voiceFeedbackManager.announceRepCount(repCount)
-                }
-                
-                // Voice feedback for posture issues can be added here
-                
-                previousRepCount = repCount
-            }
-        }
-    }
+    // Add positioning guidance state
+    var lastPositioningGuidance by remember { mutableStateOf(0L) }
+    val positioningGuidanceCooldown = 8000L
     
-    // Clean up resources when screen is disposed
+    // Initialize camera and analysis
     DisposableEffect(poseDetectorClient, voiceFeedbackManager) {
         onDispose {
             poseDetectorClient.close()
@@ -239,6 +217,7 @@ private fun CameraPreviewScreen() {
         }
         
         // Enhanced exercise counter with form quality
+        val isCompact = LocalConfiguration.current.screenHeightDp < 700
         EnhancedExerciseCounter(
             exerciseType = currentExerciseType,
             repCount = repCount,
@@ -247,32 +226,49 @@ private fun CameraPreviewScreen() {
             hasGoodForm = currentPostureFeedback == PostureFeedback.GOOD_FORM,
             detectionConfidence = 1.0f,
             onReset = { detector?.reset(); repCount = 0 },
-            modifier = Modifier.align(Alignment.TopCenter)
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = if (isCompact) 4.dp else 8.dp),
+            compact = isCompact // NEW
         )
         
         // Posture feedback display
         PostureFeedbackDisplay(
             feedbackMessage = currentPostureFeedback?.toString(),
             isGoodForm = currentPostureFeedback == PostureFeedback.GOOD_FORM,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 200.dp)
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = if (isCompact) 70.dp else 100.dp) // reduced
         )
-        
-        // Voice settings card (toggleable)
-        VoiceSettingsCard(
-            isVoiceEnabled = voiceFeedbackEnabled,
-            speechRate = 1.0f, // Fixed speech rate for simplicity
-            onVoiceToggle = { enabled -> voiceFeedbackEnabled = enabled },
-            onSpeechRateChange = { /* No-op */ },
-            modifier = Modifier.align(Alignment.CenterStart)
-        )
-        
-        // Camera guidance card (shows when detection confidence is low)
-        CameraGuidanceCard(
-            exerciseType = ExerciseType.PUSH_UP,
-            detectionConfidence = 1.0f, // Fixed confidence for simplicity
-            modifier = Modifier.align(Alignment.BottomStart)
-        )
-        
+
+        // Guidance toggle FAB (help) uses guidanceVisible (now declared)
+        FloatingActionButton(
+            onClick = { guidanceVisible = !guidanceVisible },
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, bottom = 88.dp),
+            containerColor = if (guidanceVisible) Color(0xFF4ECCA3) else Color(0xFF424255),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Help,
+                contentDescription = "Guidance",
+                tint = Color.White
+            )
+        }
+
+        // REMOVE duplicated exercise selector FAB if already defined earlier:
+        // (Deleted second duplicate FAB at bottom-start to avoid UI duplication)
+
+        // Guidance card conditional
+        if (guidanceVisible) {
+            CameraGuidanceCard(
+                exerciseType = currentExerciseType,
+                detectionConfidence = 0.4f,
+                modifier = Modifier.align(Alignment.BottomStart)
+            )
+        }
+
         // Debug button
         FloatingActionButton(
             onClick = { showDebugInfo = !showDebugInfo },
@@ -344,8 +340,6 @@ private fun CameraPreviewScreen() {
                 debugEnabled = showDebugInfo,
                 onDebugToggle = { showDebugInfo = it },
                 postureEnabled = true,
-                onSensitivityChange = { detectionSensitivity = it },
-                sensitivity = detectionSensitivity,
                 onClose = { showSettings = false },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -365,6 +359,128 @@ private fun CameraPreviewScreen() {
             hasReps = repCount > 0,
             modifier = Modifier.align(Alignment.BottomEnd)
         )
+
+        // Visibility hint chip (uses lifted state)
+        if (visibilityHint != null) {
+            Surface(
+                modifier = Modifier.align(Alignment.Center),
+                color = Color.Black.copy(0.6f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = visibilityHint!!,
+                    modifier = Modifier.padding(16.dp),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+
+    // Collect pose results and process push-ups
+    LaunchedEffect(imageAnalyzer, smartModeEnabled) {
+        imageAnalyzer.poseResults.collect { poseResult ->
+            currentPoseResult = poseResult
+            val pose = poseResult.pose
+
+            // Enhanced visibility evaluation with voice
+            val (isVisible, hint) = evaluateVisibility(pose, currentExerciseType)
+            fullyVisible = isVisible
+            visibilityHint = hint
+            
+            // Voice announce visibility issues
+            if (!isVisible && hint != null && voiceFeedbackEnabled) {
+                voiceFeedbackManager.announceVisibilityGuidance(hint)
+                
+                // Provide positioning guidance less frequently
+                val now = System.currentTimeMillis()
+                if (now - lastPositioningGuidance > positioningGuidanceCooldown) {
+                    voiceFeedbackManager.announcePositioningGuidance(currentExerciseType.name)
+                    lastPositioningGuidance = now
+                }
+            }
+            
+            if (!isVisible) {
+                currentPostureFeedback = null
+                previousRepCount = repCount
+                return@collect
+            }
+
+            // Smart mode stable detection
+            if (smartModeEnabled) {
+                val rawDetected = classifyExercise(pose)
+                if (stableCandidate == null || rawDetected != stableCandidate) {
+                    stableCandidate = rawDetected
+                    candidateStableFrames = 1
+                } else {
+                    candidateStableFrames++
+                }
+                val now = System.currentTimeMillis()
+                if (candidateStableFrames >= stabilityFramesRequired &&
+                    rawDetected != currentExerciseType &&
+                    now - lastSwitchTime > smartSwitchCooldownMs
+                ) {
+                    currentExerciseType = rawDetected
+                    lastSwitchTime = now
+                    voiceFeedbackManager.announceExerciseDetectionCountdown(
+                        rawDetected.name.replace('_',' ').lowercase().replaceFirstChar { it.uppercase() }
+                    )
+                    voiceFeedbackManager.announceExerciseIntro(
+                        rawDetected.name.replace('_',' ').lowercase().replaceFirstChar { it.uppercase() }
+                    )
+                    lastAnnouncedExercise = rawDetected
+                    detector = ExerciseDetectorFactory.createDetector(rawDetected)
+                    repCount = 0
+                    previousRepCount = 0
+                }
+            }
+
+            detector?.processPose(pose)
+
+            // Movement presence heuristic (primary angle change)
+            val primaryAngleNow = detector?.state?.value?.primaryAngle
+            if (primaryAngleNow != null && lastPrimaryAngleSnapshot != null) {
+                if (abs(primaryAngleNow - lastPrimaryAngleSnapshot!!) > 2f) {
+                    lastRepOrMovementTime = System.currentTimeMillis()
+                }
+            }
+            lastPrimaryAngleSnapshot = primaryAngleNow
+
+            repCount = detector?.getRepCount() ?: 0
+            val phase = detector?.getCurrentPhase() ?: ExercisePhase.UP
+            val mappedState = when (phase) {
+                ExercisePhase.UP -> PushUpState.UP_POSITION
+                ExercisePhase.DOWN -> PushUpState.DOWN_POSITION
+                ExercisePhase.TRANSITIONING -> PushUpState.UNKNOWN
+            }
+
+            val analysisResult = postureAnalyzer.analyzePose(pose, mappedState)
+            currentPostureFeedback = analysisResult.feedback
+            formQuality = analysisResult.formQuality
+            averageFormQuality = analysisResult.averageFormQuality
+
+            val nowTs = System.currentTimeMillis()
+
+            if (voiceFeedbackEnabled) {
+                // Rep announcements
+                if (repCount > previousRepCount) {
+                    voiceFeedbackManager.announceRepCount(repCount)
+                    voiceFeedbackManager.maybeEncourage(repCount)
+                    previousRepCount = repCount
+                    lastRepOrMovementTime = nowTs
+                }
+                // Posture voice (throttled inside manager)
+                voiceFeedbackManager.providePostureFeedback(currentPostureFeedback, formQuality)
+                // Inactivity prompt (>12s, no reps)
+                if (repCount == 0 && nowTs - lastRepOrMovementTime > 12000) {
+                    voiceFeedbackManager.announceExerciseIntro(
+                        currentExerciseType.name.replace('_',' ').lowercase().replaceFirstChar { it.uppercase() }
+                    )
+                    lastRepOrMovementTime = nowTs
+                }
+            }
+        }
     }
 }
 
@@ -453,8 +569,6 @@ private fun SettingsPanel(
     debugEnabled: Boolean,
     onDebugToggle: (Boolean) -> Unit,
     postureEnabled: Boolean,
-    sensitivity: Float,
-    onSensitivityChange: (Float) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -493,24 +607,10 @@ private fun SettingsPanel(
                 enabled = false,
                 icon = Icons.Default.Visibility
             )
-            Column {
-                Text("Detection Sensitivity", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Slider(
-                    value = sensitivity,
-                    onValueChange = onSensitivityChange,
-                    valueRange = 0.5f..1.5f,
-                    steps = 9,
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color(0xFF4ECCA3),
-                        activeTrackColor = Color(0xFF4ECCA3)
-                    )
-                )
-                Text(
-                    text = String.format("%.2f", sensitivity),
-                    color = Color.Gray,
-                    fontSize = 12.sp
-                )
-            }
+            Text(
+                "Smart Mode: auto exercise detection stabilized to reduce flicker.",
+                color = Color.Gray, fontSize = 12.sp
+            )
         }
     }
 }
@@ -608,4 +708,109 @@ private fun detectExerciseType(pose: Pose): ExerciseType {
     
     // Default to push-up if no clear pattern is detected
     return ExerciseType.PUSH_UP
+}
+
+// Replace classifyExercise implementation
+private fun classifyExercise(pose: Pose): ExerciseType {
+    val lm = { id: Int -> pose.getPoseLandmark(id) }
+    val lSh = lm(PoseLandmark.LEFT_SHOULDER)
+    val rSh = lm(PoseLandmark.RIGHT_SHOULDER)
+    val lHip = lm(PoseLandmark.LEFT_HIP)
+    val rHip = lm(PoseLandmark.RIGHT_HIP)
+    val lWr = lm(PoseLandmark.LEFT_WRIST)
+    val rWr = lm(PoseLandmark.RIGHT_WRIST)
+    val nose = lm(PoseLandmark.NOSE)
+    if (lSh == null || rSh == null || lHip == null || rHip == null) return ExerciseType.PUSH_UP
+
+    val shoulderMidY = (lSh.position.y + rSh.position.y) / 2f
+    val hipMidY = (lHip.position.y + rHip.position.y) / 2f
+    val torsoSpan = kotlin.math.abs(hipMidY - shoulderMidY)
+    val shoulderWidth = kotlin.math.abs(lSh.position.x - rSh.position.x)
+    val isHorizontal = torsoSpan < shoulderWidth * 0.55f
+
+    val wristsHigh = if (lWr != null && rWr != null && nose != null) {
+        val refY = shoulderMidY - 20f // use shoulders to allow bent knees
+        (lWr.position.y < refY && rWr.position.y < refY)
+    } else false
+
+    if (!isHorizontal && wristsHigh) return ExerciseType.PULL_UP
+    if (isHorizontal) return ExerciseType.PUSH_UP
+
+    // Squat heuristic (upright & knees bending) minimized here; keep previous logic if needed
+    val lK = lm(PoseLandmark.LEFT_KNEE); val rK = lm(PoseLandmark.RIGHT_KNEE)
+    val lA = lm(PoseLandmark.LEFT_ANKLE); val rA = lm(PoseLandmark.RIGHT_ANKLE)
+    if (lK != null && rK != null && lA != null && rA != null) {
+        val kneeAvgY = (lK.position.y + rK.position.y) / 2f
+        val ankleAvgY = (lA.position.y + rA.position.y) / 2f
+        if ((ankleAvgY - kneeAvgY) > 25f) return ExerciseType.SQUAT
+    }
+    return ExerciseType.PUSH_UP
+}
+
+// Enhanced visibility evaluation with better messages
+private fun evaluateVisibility(pose: Pose, exerciseType: ExerciseType): Pair<Boolean,String?> {
+    val landmarks = pose.allPoseLandmarks
+    if (landmarks.isEmpty()) return false to "No person detected. Step into camera view."
+    
+    val high = landmarks.filter { it.inFrameLikelihood >= 0.6f }
+    if (high.size < 10) return false to "Move closer or improve lighting."
+    
+    fun need(vararg ids: Int): Boolean =
+        ids.all { id -> pose.getPoseLandmark(id)?.inFrameLikelihood ?: 0f >= 0.6f }
+
+    val coreOk = need(
+        PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+        PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+        PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST,
+        PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP
+    )
+    if (!coreOk) return false to "Show your upper body clearly."
+
+    when (exerciseType) {
+        ExerciseType.PUSH_UP -> {
+            val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
+            val lSh = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
+            val lHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
+            
+            if (nose?.inFrameLikelihood ?: 0f < 0.7f) {
+                return false to "Position camera above you. Look down at the ground."
+            }
+            
+            if (lSh != null && lHip != null) {
+                val torsoLength = abs(lSh.position.y - lHip.position.y)
+                if (torsoLength < 60f) {
+                    return false to "Move camera higher to see your full body."
+                }
+            }
+        }
+        
+        ExerciseType.PULL_UP -> {
+            val lw = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
+            val rw = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
+            val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
+            
+            if (lw == null || rw == null) {
+                return false to "Show both hands clearly."
+            }
+            
+            if (nose != null) {
+                val avgWristY = (lw.position.y + rw.position.y) / 2f
+                if (avgWristY > nose.position.y) {
+                    return false to "Hang from the bar. Hands should be above your head."
+                }
+            }
+        }
+        
+        ExerciseType.SQUAT -> {
+            val lk = pose.getPoseLandmark(PoseLandmark.LEFT_KNEE)
+            val rk = pose.getPoseLandmark(PoseLandmark.RIGHT_KNEE)
+            val la = pose.getPoseLandmark(PoseLandmark.LEFT_ANKLE)
+            val ra = pose.getPoseLandmark(PoseLandmark.RIGHT_ANKLE)
+            
+            if (lk == null || rk == null || la == null || ra == null) {
+                return false to "Show your full legs for squats."
+            }
+        }
+    }
+    return true to null
 }
