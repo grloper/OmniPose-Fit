@@ -187,13 +187,11 @@ class AngleCalculatorTest {
     
     private fun createMockLandmark(x: Float, y: Float, confidence: Float): PoseLandmark {
         val landmark = mockk<PoseLandmark>()
-        val position = mockk<com.google.mlkit.vision.common.PointF>()
-        
+        val position = mockk<android.graphics.PointF>()
         every { position.x } returns x
         every { position.y } returns y
         every { landmark.position } returns position
         every { landmark.inFrameLikelihood } returns confidence
-        
         return landmark
     }
 }

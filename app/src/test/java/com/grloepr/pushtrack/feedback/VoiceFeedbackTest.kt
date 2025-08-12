@@ -1,7 +1,6 @@
 package com.grloepr.pushtrack.feedback
 
 import android.content.Context
-import android.graphics.PointF
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 import com.grloepr.pushtrack.analysis.PushUpState
@@ -9,9 +8,7 @@ import io.mockk.*
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
+import org.junit.Assert.* // replaced kotlin.test imports
 
 class VoiceFeedbackManagerTest {
 
@@ -76,23 +73,22 @@ class PostureAnalyzerTest {
 
     @Test
     fun `analyzePose should return valid analysis result`() {
-        // Mock pose landmarks
         val leftShoulder = mockk<PoseLandmark>()
         val leftElbow = mockk<PoseLandmark>()
         val leftWrist = mockk<PoseLandmark>()
-        
-        every { leftShoulder.position } returns PointF(100f, 100f)
-        every { leftShoulder.inFrameLikelihood } returns 0.8f
-        every { leftElbow.position } returns PointF(120f, 150f)
-        every { leftElbow.inFrameLikelihood } returns 0.8f
-        every { leftWrist.position } returns PointF(140f, 200f)
-        every { leftWrist.inFrameLikelihood } returns 0.8f
-        
+        val shoulderPos = mockk<android.graphics.PointF>()
+        val elbowPos = mockk<android.graphics.PointF>()
+        val wristPos = mockk<android.graphics.PointF>()
+        every { shoulderPos.x } returns 100f; every { shoulderPos.y } returns 100f
+        every { elbowPos.x } returns 120f; every { elbowPos.y } returns 150f
+        every { wristPos.x } returns 140f; every { wristPos.y } returns 200f
+        every { leftShoulder.position } returns shoulderPos; every { leftShoulder.inFrameLikelihood } returns 0.8f
+        every { leftElbow.position } returns elbowPos; every { leftElbow.inFrameLikelihood } returns 0.8f
+        every { leftWrist.position } returns wristPos; every { leftWrist.inFrameLikelihood } returns 0.8f
         every { mockPose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER) } returns leftShoulder
         every { mockPose.getPoseLandmark(PoseLandmark.LEFT_ELBOW) } returns leftElbow
         every { mockPose.getPoseLandmark(PoseLandmark.LEFT_WRIST) } returns leftWrist
-        every { mockPose.getPoseLandmark(any()) } returns null // Default for other landmarks
-        
+        every { mockPose.getPoseLandmark(any()) } returns null
         val result = postureAnalyzer.analyzePose(mockPose, PushUpState.UP_POSITION)
         
         assertNotNull(result)

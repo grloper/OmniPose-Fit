@@ -163,25 +163,25 @@ class PushUpDetectorTest {
         val pose = mockk<Pose>()
         
         // Create mock landmarks with high confidence
-        val leftShoulder = createMockLandmark(100f, 100f, 0.9f)
-        val leftElbow = createMockLandmark(150f, 150f, 0.9f)
-        val rightShoulder = createMockLandmark(200f, 100f, 0.9f)
-        val rightElbow = createMockLandmark(250f, 150f, 0.9f)
+        val leftShoulder = createMockLandmark(x = 100f, y = 100f, confidence = 0.9f)
+        val leftElbow = createMockLandmark(x = 150f, y = 150f, confidence = 0.9f)
+        val rightShoulder = createMockLandmark(x = 200f, y = 100f, confidence = 0.9f)
+        val rightElbow = createMockLandmark(x = 250f, y = 150f, confidence = 0.9f)
         
         // Calculate wrist positions based on target angle
         val wristDistance = 50f
         val angleRad = Math.toRadians(targetAngle)
         
         val leftWrist = createMockLandmark(
-            150f + (wristDistance * cos(angleRad)).toFloat(),
-            150f + (wristDistance * sin(angleRad)).toFloat(),
-            0.9f
+            x = 150f + (wristDistance * cos(angleRad)).toFloat(),
+            y = 150f + (wristDistance * sin(angleRad)).toFloat(),
+            confidence = 0.9f
         )
         
         val rightWrist = createMockLandmark(
-            250f + (wristDistance * cos(angleRad)).toFloat(),
-            150f + (wristDistance * sin(angleRad)).toFloat(),
-            0.9f
+            x = 250f + (wristDistance * cos(angleRad)).toFloat(),
+            y = 150f + (wristDistance * sin(angleRad)).toFloat(),
+            confidence = 0.9f
         )
         
         every { pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER) } returns leftShoulder
@@ -196,13 +196,11 @@ class PushUpDetectorTest {
     
     private fun createMockLandmark(x: Float, y: Float, confidence: Float): PoseLandmark {
         val landmark = mockk<PoseLandmark>()
-        val position = mockk<com.google.mlkit.vision.common.PointF>()
-        
+        val position = mockk<android.graphics.PointF>()
         every { position.x } returns x
         every { position.y } returns y
         every { landmark.position } returns position
         every { landmark.inFrameLikelihood } returns confidence
-        
         return landmark
     }
 }

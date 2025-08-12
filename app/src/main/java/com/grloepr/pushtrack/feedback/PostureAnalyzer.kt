@@ -163,30 +163,27 @@ class PostureAnalyzer {
         val rightShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
         val leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
         val rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
-        
-        if (nose == null || leftShoulder == null || rightShoulder == null || 
+
+        if (nose == null || leftShoulder == null || rightShoulder == null ||
             leftHip == null || rightHip == null) return null
-        
-        // Calculate center points
-        val shoulderCenter = PointF(
-            (leftShoulder.position.x + rightShoulder.position.x) / 2,
-            (leftShoulder.position.y + rightShoulder.position.y) / 2
-        )
-        
-        val hipCenter = PointF(
-            (leftHip.position.x + rightHip.position.x) / 2,
-            (leftHip.position.y + rightHip.position.y) / 2
-        )
-        
-        // Calculate deviation from straight line
-        val expectedY = nose.position.y + 
-            (hipCenter.y - nose.position.y) * 
-            (shoulderCenter.x - nose.position.x) / (hipCenter.x - nose.position.x)
-        
-        val deviation = abs(shoulderCenter.y - expectedY)
-        val maxDeviation = 100f // Pixels - adjust based on image resolution
-        
-        return ((maxDeviation - deviation) / maxDeviation * 100).coerceIn(0f, 100f)
+
+        // Shoulder and hip centers (avoid PointF construction)
+        val shoulderCenterX = (leftShoulder.position.x + rightShoulder.position.x) / 2f
+        val shoulderCenterY = (leftShoulder.position.y + rightShoulder.position.y) / 2f
+        val hipCenterX = (leftHip.position.x + rightHip.position.x) / 2f
+        val hipCenterY = (leftHip.position.y + rightHip.position.y) / 2f
+
+        // Prevent division by zero
+        val denom = (hipCenterX - nose.position.x)
+        if (abs(denom) < 0.0001f) return 50f
+
+        val expectedY = nose.position.y +
+            (hipCenterY - nose.position.y) *
+            (shoulderCenterX - nose.position.x) / denom
+
+        val deviation = abs(shoulderCenterY - expectedY)
+        val maxDeviation = 100f
+        return ((maxDeviation - deviation) / maxDeviation * 100f).coerceIn(0f, 100f)
     }
     
     /**
@@ -259,7 +256,7 @@ class PostureAnalyzer {
     /**
      * Calculate distance between two points
      */
-    private fun distance(p1: android.graphics.PointF, p2: android.graphics.PointF): Float {
+    private fun distance(p1: android.graphics.PointF, p2: android.graphics.PointF): Float { // reverted to android.graphics.PointF
         val dx = p1.x - p2.x
         val dy = p1.y - p2.y
         return sqrt(dx * dx + dy * dy)
@@ -306,8 +303,3 @@ data class PostureAnalysisResult(
     val feedback: PostureFeedback?, // Specific feedback to give, if any
     val hasGoodForm: Boolean // Quick check for good form
 )
-
-/**
- * Simple PointF for calculations
- */
-data class PointF(val x: Float, val y: Float)
