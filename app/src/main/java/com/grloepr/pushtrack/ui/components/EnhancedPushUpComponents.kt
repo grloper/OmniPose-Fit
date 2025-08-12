@@ -38,6 +38,7 @@ fun EnhancedExerciseCounter(
     formQuality: Float, // 0-100
     averageFormQuality: Float,
     hasGoodForm: Boolean,
+    detectionConfidence: Float = 0f, // 0-1
     onReset: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -125,6 +126,15 @@ fun EnhancedExerciseCounter(
             
             Spacer(modifier = Modifier.height(16.dp))
             
+            // Detection confidence indicator
+            if (detectionConfidence > 0f) {
+                DetectionConfidenceIndicator(
+                    confidence = detectionConfidence,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            
             // Form quality indicator
             FormQualityIndicator(
                 quality = animatedQuality,
@@ -169,6 +179,70 @@ private fun getExerciseIcon(exerciseType: ExerciseType): ImageVector {
         ExerciseType.PUSH_UP -> Icons.Default.FitnessCenter
         ExerciseType.PULL_UP -> Icons.Default.Accessibility
         ExerciseType.SQUAT -> Icons.Default.DirectionsRun
+    }
+}
+
+/**
+ * Detection confidence indicator with signal strength display
+ */
+@Composable
+private fun DetectionConfidenceIndicator(
+    confidence: Float, // 0-1
+    modifier: Modifier = Modifier
+) {
+    val confidencePercent = (confidence * 100).toInt()
+    val signalColor = when {
+        confidence >= 0.8f -> Color(0xFF4ECCA3) // Green - Strong
+        confidence >= 0.5f -> Color(0xFFFFD700) // Yellow - Moderate
+        else -> Color(0xFFFF6B6B) // Red - Weak
+    }
+    
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Signal strength icon
+            Icon(
+                imageVector = when {
+                    confidence >= 0.8f -> Icons.Default.CheckCircle
+                    confidence >= 0.5f -> Icons.Default.Warning
+                    else -> Icons.Default.Error
+                },
+                contentDescription = null,
+                tint = signalColor,
+                modifier = Modifier.size(16.dp)
+            )
+            
+            Text(
+                text = "Detection: $confidencePercent%",
+                color = signalColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(4.dp))
+        
+        // Confidence bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color.Gray.copy(alpha = 0.3f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(confidence)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(signalColor)
+            )
+        }
     }
 }
 
@@ -573,5 +647,128 @@ private fun ExerciseTypeButton(
                 )
             }
         }
+    }
+}
+
+/**
+ * Camera positioning guidance card that provides exercise-specific camera placement tips
+ */
+@Composable
+fun CameraGuidanceCard(
+    exerciseType: ExerciseType,
+    detectionConfidence: Float,
+    modifier: Modifier = Modifier
+) {
+    val guidance = getCameraGuidance(exerciseType)
+    val isLowConfidence = detectionConfidence < 0.5f
+    
+    AnimatedVisibility(
+        visible = isLowConfidence,
+        enter = slideInHorizontally() + fadeIn(),
+        exit = slideOutHorizontally() + fadeOut()
+    ) {
+        Card(
+            modifier = modifier.padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFFFF6B6B).copy(alpha = 0.9f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                // Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CameraAlt,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Camera Positioning",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Exercise specific guidance
+                Text(
+                    text = guidance.title,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Text(
+                    text = guidance.description,
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+                
+                // Camera mode suggestion
+                if (guidance.preferredCamera != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Cameraswitch,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Use ${guidance.preferredCamera} camera",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Data class for camera positioning guidance
+ */
+data class CameraGuidance(
+    val title: String,
+    val description: String,
+    val preferredCamera: String? = null
+)
+
+/**
+ * Get camera guidance for specific exercise type
+ */
+private fun getCameraGuidance(exerciseType: ExerciseType): CameraGuidance {
+    return when (exerciseType) {
+        ExerciseType.PUSH_UP -> CameraGuidance(
+            title = "For Push-Ups",
+            description = "Position camera in front of you (selfie mode) to see your full body horizontally. Ensure your entire body from head to feet is visible.",
+            preferredCamera = "front"
+        )
+        ExerciseType.PULL_UP -> CameraGuidance(
+            title = "For Pull-Ups", 
+            description = "Position camera behind you to capture the full hanging motion. Make sure your arms and head are clearly visible when extended.",
+            preferredCamera = "back"
+        )
+        ExerciseType.SQUAT -> CameraGuidance(
+            title = "For Squats",
+            description = "Position camera to the side or in front to see knee bending motion. Ensure your legs and upper body are fully visible.",
+            preferredCamera = "front or side"
+        )
     }
 }

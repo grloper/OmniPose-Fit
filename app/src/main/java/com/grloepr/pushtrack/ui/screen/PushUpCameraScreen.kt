@@ -89,6 +89,7 @@ private fun CameraPreviewScreen() {
     var currentExerciseType by remember { mutableStateOf(ExerciseType.PUSH_UP) }
     var smartModeEnabled by remember { mutableStateOf(false) }
     var exerciseState by remember { mutableStateOf(ExerciseState()) }
+    var resetTrigger by remember { mutableStateOf(0) } // Trigger for manual resets
     
     // Legacy push-up state for compatibility
     var pushUpResult by remember { mutableStateOf(PushUpResult(0, PushUpState.UNKNOWN, null)) }
@@ -106,9 +107,22 @@ private fun CameraPreviewScreen() {
     val showDebugInfo by settingsManager.showDebugInfo.collectAsState()
     val enhancedUI by settingsManager.enhancedUI.collectAsState()
     
-    // Initialize exercise detector based on current type
-    val exerciseDetector = remember(currentExerciseType) { 
-        ExerciseDetectorFactory.createDetector(currentExerciseType)
+    // Reset function that triggers detector recreation
+    val resetWorkout = {
+        resetTrigger++
+        legacyPushUpDetector.reset()
+        voiceFeedbackManager.reset()
+        workoutStartTime = System.currentTimeMillis()
+        exerciseState = ExerciseState()
+        pushUpResult = PushUpResult(0, PushUpState.UNKNOWN, null)
+    }
+    
+    // Initialize exercise detector with proper lifecycle management
+    val exerciseDetector = remember(currentExerciseType, resetTrigger) { 
+        ExerciseDetectorFactory.createDetector(currentExerciseType).also {
+            // Reset detector state when switching exercise types or manual reset
+            it.reset()
+        }
     }
     
     // Initialize legacy push-up detector for compatibility  
@@ -132,11 +146,11 @@ private fun CameraPreviewScreen() {
     }
     
     // Collect pose results and process exercises
-    LaunchedEffect(imageAnalyzer, currentExerciseType) {
+    LaunchedEffect(imageAnalyzer, currentExerciseType, exerciseDetector) {
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
             
-            // Process pose with modular detector
+            // Process pose with current modular detector
             exerciseDetector.processPose(poseResult.pose)
             
             // Update exercise state
@@ -181,8 +195,8 @@ private fun CameraPreviewScreen() {
                 val detectedType = detectExerciseType(poseResult.pose)
                 if (detectedType != currentExerciseType) {
                     currentExerciseType = detectedType
-                    // Reset when switching exercise types
-                    exerciseDetector.reset()
+                    // Reset legacy detector and voice feedback only
+                    // The exerciseDetector will be recreated by remember(currentExerciseType)
                     legacyPushUpDetector.reset()
                     voiceFeedbackManager.reset()
                     workoutStartTime = System.currentTimeMillis()
@@ -221,10 +235,7 @@ private fun CameraPreviewScreen() {
             ),
             onStartNewWorkout = {
                 showSummary = false
-                exerciseDetector.reset()
-                legacyPushUpDetector.reset()
-                voiceFeedbackManager.reset()
-                workoutStartTime = System.currentTimeMillis()
+                resetWorkout()
             },
             onBackToCamera = {
                 showSummary = false
@@ -279,12 +290,8 @@ private fun CameraPreviewScreen() {
                 formQuality = pushUpResult.postureAnalysis?.formQuality ?: 0f,
                 averageFormQuality = pushUpResult.postureAnalysis?.averageFormQuality ?: 0f,
                 hasGoodForm = pushUpResult.postureAnalysis?.hasGoodForm ?: false,
-                onReset = { 
-                    exerciseDetector.reset()
-                    legacyPushUpDetector.reset()
-                    voiceFeedbackManager.reset()
-                    workoutStartTime = System.currentTimeMillis()
-                },
+                detectionConfidence = exerciseState.confidence,
+                onReset = resetWorkout,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
         } else {
@@ -292,12 +299,7 @@ private fun CameraPreviewScreen() {
             ExerciseOverlay(
                 exerciseType = currentExerciseType,
                 repCount = pushUpResult.repCount,
-                onReset = { 
-                    exerciseDetector.reset()
-                    legacyPushUpDetector.reset()
-                    voiceFeedbackManager.reset()
-                    workoutStartTime = System.currentTimeMillis()
-                },
+                onReset = resetWorkout,
                 modifier = Modifier.align(Alignment.TopCenter)
             )
         }
@@ -316,8 +318,8 @@ private fun CameraPreviewScreen() {
                 smartModeEnabled = smartModeEnabled,
                 onExerciseSelected = { exerciseType ->
                     currentExerciseType = exerciseType
-                    // Reset detectors when switching exercise type
-                    exerciseDetector.reset()
+                    // Reset only legacy detector and voice feedback
+                    // The exerciseDetector will be recreated by remember(currentExerciseType)
                     legacyPushUpDetector.reset()
                     voiceFeedbackManager.reset()
                     workoutStartTime = System.currentTimeMillis()
@@ -337,6 +339,13 @@ private fun CameraPreviewScreen() {
                 modifier = Modifier.align(Alignment.CenterStart)
             )
         }
+        
+        // Camera guidance card (shows when detection confidence is low)
+        CameraGuidanceCard(
+            exerciseType = currentExerciseType,
+            detectionConfidence = exerciseState.confidence,
+            modifier = Modifier.align(Alignment.BottomStart)
+        )
         
         // Debug button
         FloatingActionButton(
