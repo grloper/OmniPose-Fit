@@ -12,17 +12,43 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Enhanced push-up detector with ground-level detection and context-aware angle analysis
- * Specifically designed for low-angle camera positioning with hand/foot level analysis
+ * Camera angle classification for adaptive detection
+ */
+enum class CameraAngle {
+    UNKNOWN,
+    HIGH_ANGLE,      // Camera positioned above person (normal setup)
+    MID_ANGLE,       // Camera at moderate angle
+    LOW_ANGLE,       // Camera positioned at ground level (phone on ground against wall)
+    GROUND_LEVEL     // Camera is essentially at the same level as the person
+}
+
+/**
+ * Enhanced push-up detector with camera angle adaptation and movement-based detection
+ * Specifically designed to work from ANY camera angle including ground-level positioning
  */
 class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     
-    // GROUND-LEVEL DETECTION: Context-aware thresholds based on detected body positioning
-    private var upElbowThreshold = 140f    // Arms extended (higher for ground position)
-    private var downElbowThreshold = 90f   // Arms bent (90+ degrees as requested)
+    // ADAPTIVE DETECTION: Context-aware thresholds based on detected camera angle
+    private var upElbowThreshold = 140f    // Arms extended
+    private var downElbowThreshold = 90f   // Arms bent
     private val torsoParallelThreshold = 35f // Max degrees from horizontal for good form (very forgiving)
     
-    // Ground-level detection parameters - Named constants for clarity
+    // Camera angle detection parameters
+    private var detectedCameraAngle: CameraAngle = CameraAngle.UNKNOWN
+    private var cameraAngleConfidence = 0f
+    private val cameraAngleFrames = 10  // Frames to establish camera angle
+    private var cameraAngleCalibrationCount = 0
+    private var isCameraAngleEstablished = false
+    
+    // Movement-based detection for low-angle cameras
+    private var isUsingMovementDetection = false
+    private val movementHistorySize = 8
+    private var shoulderDistanceHistory = FloatArray(movementHistorySize) { 0f }
+    private var wristDistanceHistory = FloatArray(movementHistorySize) { 0f }
+    private var movementHistoryIndex = 0
+    private var movementHistoryCount = 0
+    
+    // Ground-level detection parameters (legacy for high-angle cameras)
     private var groundLevel: Float? = null
     private var handLevel: Float? = null
     private var bodyBaselineY: Float? = null
@@ -73,146 +99,86 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     
     
     /**
-     * Calculate primary angle with ground-level detection and graceful degradation
-     * Implements hand/foot level analysis as requested by @grloper
+     * Calculate primary angle with camera angle adaptation and movement-based detection
+     * CORE INNOVATION: Adapts detection method based on camera positioning
      */
     override fun calculatePrimaryAngle(pose: Pose): Float? {
         val normalizedPose = KeypointNormalizer.normalizePose(pose) ?: return null
         lastNormalizedPose = normalizedPose
         
-        // STEP 1: Establish ground level reference using hand/foot positioning
-        establishGroundLevel(normalizedPose)
-        
-        // STEP 2: Detect current ground contact state with error handling
-        val groundContactState = try {
-            detectGroundContact(normalizedPose)
-        } catch (e: Exception) {
-            debugInfo["ground_detection_error"] = e.message ?: "unknown"
-            GroundContactState(false, 0f, null, null)  // Graceful degradation
+        // STEP 1: Detect camera angle if not yet established
+        if (!isCameraAngleEstablished) {
+            detectCameraAngle(normalizedPose)
         }
         
-        isInGroundPosition = groundContactState.isInContact
-        groundContactConfidence = groundContactState.confidence
-        
-        // STEP 3: Calculate context-aware elbow angles with fallback
-        var leftAngle: Float? = null
-        var rightAngle: Float? = null
-        
-        try {
-            leftAngle = calculateContextualElbowAngle(normalizedPose, isLeft = true)
-            rightAngle = calculateContextualElbowAngle(normalizedPose, isLeft = false)
-        } catch (e: Exception) {
-            debugInfo["angle_calculation_error"] = e.message ?: "unknown"
-            // Fallback to standard angle calculation
-            leftAngle = calculateNormalizedElbowAngle(normalizedPose, isLeft = true)
-            rightAngle = calculateNormalizedElbowAngle(normalizedPose, isLeft = false)
-        }
-        
-        val validAngles = listOfNotNull(leftAngle, rightAngle)
-        var averageAngle: Float? = null
-        
-        // STEP 4: Primary detection method - context-aware elbow angles
-        if (validAngles.isNotEmpty()) {
-            averageAngle = validAngles.average().toFloat()
-            
-            // Apply ground-position context adjustment with confidence gating
-            if (isInGroundPosition && groundContactConfidence > 0.6f && isGroundLevelEstablished) {
-                try {
-                    averageAngle = adjustAngleForGroundPosition(averageAngle, groundContactState)
-                } catch (e: Exception) {
-                    debugInfo["ground_adjustment_error"] = e.message ?: "unknown"
-                    // Continue with unadjusted angle
-                }
+        // STEP 2: Choose detection method based on camera angle
+        val primaryAngle = when (detectedCameraAngle) {
+            CameraAngle.LOW_ANGLE, CameraAngle.GROUND_LEVEL -> {
+                // Use movement-based detection for low-angle cameras
+                calculateMovementBasedAngle(normalizedPose)
             }
-        } else {
-            // STEP 5: Enhanced fallback method with error recovery
-            averageAngle = try {
-                if (isGroundLevelEstablished) {
-                    calculateGroundAwareFallbackAngle(normalizedPose)
-                } else {
-                    calculateFallbackAngle(normalizedPose)  // Standard fallback
-                }
-            } catch (e: Exception) {
-                debugInfo["fallback_calculation_error"] = e.message ?: "unknown"
-                calculateFallbackAngle(normalizedPose)  // Last resort
+            CameraAngle.HIGH_ANGLE, CameraAngle.MID_ANGLE -> {
+                // Use traditional ground-level detection for higher cameras
+                calculateGroundAwareAngle(normalizedPose)
+            }
+            CameraAngle.UNKNOWN -> {
+                // Use hybrid approach until camera angle is determined
+                calculateHybridAngle(normalizedPose)
             }
         }
         
-        if (averageAngle == null) {
-            debugInfo["detection_failure_reason"] = "no_valid_angles"
+        if (primaryAngle == null) {
+            debugInfo["detection_failure_reason"] = "no_valid_angles_for_camera_angle_${detectedCameraAngle.name}"
             return null
         }
         
-        // STEP 6: Adaptive calibration with ground-level awareness and bounds checking
+        // STEP 3: Adaptive calibration based on camera angle
         if (!isCalibrated && calibrationFrames < calibrationPeriod) {
-            // Only calibrate when we have stable ground detection OR no ground detection needed
-            val canCalibrate = (isGroundLevelEstablished && groundContactConfidence > 0.5f) || 
-                              (!isGroundLevelEstablished && groundCalibrationCount > 5)
+            val canCalibrate = when (detectedCameraAngle) {
+                CameraAngle.LOW_ANGLE, CameraAngle.GROUND_LEVEL -> {
+                    // For low-angle cameras, calibrate based on movement patterns
+                    movementHistoryCount >= 5 && primaryAngle > 30f && primaryAngle < 180f
+                }
+                else -> {
+                    // For higher cameras, use ground detection or basic calibration
+                    (isGroundLevelEstablished && groundContactConfidence > 0.5f) || 
+                    (!isGroundLevelEstablished && groundCalibrationCount > 5)
+                }
+            }
             
-            if (canCalibrate && averageAngle > 30f && averageAngle < 180f) {  // Sanity bounds
-                maxObservedAngle = maxOf(maxObservedAngle, averageAngle)
-                minObservedAngle = minOf(minObservedAngle, averageAngle)
+            if (canCalibrate && primaryAngle > 30f && primaryAngle < 180f) {
+                maxObservedAngle = maxOf(maxObservedAngle, primaryAngle)
+                minObservedAngle = minOf(minObservedAngle, primaryAngle)
                 calibrationFrames++
                 
                 if (calibrationFrames >= calibrationPeriod) {
-                    // Adapt thresholds based on observed range and ground position
-                    val range = maxObservedAngle - minObservedAngle
-                    if (range > 25f && range < 120f) { // Reasonable range bounds
-                        // Use higher thresholds for ground position (90+ degrees as requested)
-                        val baseUpThreshold = if (isGroundLevelEstablished) 140f else 120f
-                        val baseDownThreshold = if (isGroundLevelEstablished) 90f else 80f
-                        
-                        upElbowThreshold = maxOf(baseUpThreshold, maxObservedAngle - (range * 0.15f))
-                        downElbowThreshold = maxOf(baseDownThreshold, minObservedAngle + (range * 0.25f))
-                        
-                        // Ensure minimum thresholds for ground position
-                        if (isGroundLevelEstablished) {
-                            upElbowThreshold = maxOf(upElbowThreshold, 135f)
-                            downElbowThreshold = maxOf(downElbowThreshold, 90f)
-                        }
-                        
-                        isCalibrated = true
-                        debugInfo.apply {
-                            put("calibrated_up_threshold", upElbowThreshold)
-                            put("calibrated_down_threshold", downElbowThreshold)
-                            put("observed_range", range)
-                            put("ground_calibration", isGroundLevelEstablished)
-                            put("calibration_method", if (isGroundLevelEstablished) "ground_aware" else "standard")
-                        }
-                    } else {
-                        debugInfo["calibration_rejected_range"] = range
-                    }
+                    adaptThresholdsForCameraAngle()
+                    isCalibrated = true
                 }
             }
         }
         
         // Update comprehensive debug info
         debugInfo.apply {
-            put("left_elbow_angle", leftAngle ?: "null")
-            put("right_elbow_angle", rightAngle ?: "null")
-            put("average_angle", averageAngle)
-            put("valid_angles_count", validAngles.size)
+            put("camera_angle", detectedCameraAngle.name)
+            put("camera_angle_confidence", cameraAngleConfidence)
+            put("using_movement_detection", isUsingMovementDetection)
+            put("primary_angle", primaryAngle)
             put("calibration_progress", calibrationFrames)
             put("is_calibrated", isCalibrated)
-            put("using_fallback", validAngles.isEmpty())
-            put("ground_level", groundLevel ?: "establishing")
-            put("is_in_ground_position", isInGroundPosition)
-            put("ground_contact_confidence", groundContactConfidence)
-            put("ground_level_established", isGroundLevelEstablished)
-            put("detection_method", when {
-                isInGroundPosition && isGroundLevelEstablished -> "ground_aware_primary"
-                isGroundLevelEstablished -> "ground_calibrated"
-                else -> "standard"
+            put("detection_method", when (detectedCameraAngle) {
+                CameraAngle.LOW_ANGLE, CameraAngle.GROUND_LEVEL -> "movement_based"
+                CameraAngle.HIGH_ANGLE, CameraAngle.MID_ANGLE -> "ground_aware"
+                CameraAngle.UNKNOWN -> "hybrid"
             })
-            put("angle_bounds_valid", averageAngle > 30f && averageAngle < 180f)
         }
         
         // Apply temporal smoothing with bounds checking
         val smoothedAngle = try {
-            angleSmoother.addSample(averageAngle).coerceIn(30f, 180f)
+            angleSmoother.addSample(primaryAngle).coerceIn(30f, 180f)
         } catch (e: Exception) {
             debugInfo["smoothing_error"] = e.message ?: "unknown"
-            averageAngle  // Use raw angle if smoothing fails
+            primaryAngle  // Use raw angle if smoothing fails
         }
         
         debugInfo["smoothed_angle"] = smoothedAngle
@@ -221,9 +187,266 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     }
     
     /**
-     * Establish ground level reference using hand and foot positioning with outlier rejection
-     * Key innovation: Use Y-coordinates to determine when person is "on ground"
+     * Detect camera angle based on pose landmark patterns
+     * INNOVATION: Determines if camera is at ground level by analyzing body proportions
      */
+    private fun detectCameraAngle(normalizedPose: KeypointNormalizer.NormalizedPose) {
+        if (isCameraAngleEstablished) return
+        
+        // Get key landmarks for camera angle analysis
+        val leftShoulder = normalizedPose.getLandmark(PoseLandmark.LEFT_SHOULDER)
+        val rightShoulder = normalizedPose.getLandmark(PoseLandmark.RIGHT_SHOULDER)
+        val leftHip = normalizedPose.getLandmark(PoseLandmark.LEFT_HIP)
+        val rightHip = normalizedPose.getLandmark(PoseLandmark.RIGHT_HIP)
+        val leftWrist = normalizedPose.getLandmark(PoseLandmark.LEFT_WRIST)
+        val rightWrist = normalizedPose.getLandmark(PoseLandmark.RIGHT_WRIST)
+        val nose = normalizedPose.getLandmark(PoseLandmark.NOSE)
+        
+        if (leftShoulder == null || rightShoulder == null || leftHip == null || rightHip == null) {
+            return
+        }
+        
+        // Calculate body proportions and orientations
+        val shoulderY = (leftShoulder.y + rightShoulder.y) / 2f
+        val hipY = (leftHip.y + rightHip.y) / 2f
+        val shoulderX = (leftShoulder.x + rightShoulder.x) / 2f
+        val hipX = (leftHip.x + rightHip.x) / 2f
+        
+        // Analyze torso orientation relative to camera
+        val torsoHeight = abs(shoulderY - hipY)
+        val torsoWidth = abs(shoulderX - hipX)
+        val torsoAspectRatio = if (torsoHeight > 0f) torsoWidth / torsoHeight else 1f
+        
+        // Analyze head position relative to body
+        var headToBodyRatio = 1f
+        if (nose != null && leftWrist != null && rightWrist != null) {
+            val avgWristY = (leftWrist.y + rightWrist.y) / 2f
+            val headWristDistance = abs(nose.y - avgWristY)
+            val bodyHeight = abs(shoulderY - hipY)
+            headToBodyRatio = if (bodyHeight > 0f) headWristDistance / bodyHeight else 1f
+        }
+        
+        // Calculate confidence indicators for camera angle
+        var lowAngleIndicators = 0f
+        var totalIndicators = 0f
+        
+        // Indicator 1: Torso appears very wide (camera looking up from below)
+        if (torsoAspectRatio > 1.5f) {
+            lowAngleIndicators += 0.3f
+        }
+        totalIndicators += 0.3f
+        
+        // Indicator 2: Head appears very close to hands (foreshortening effect)
+        if (headToBodyRatio < 0.8f) {
+            lowAngleIndicators += 0.25f
+        }
+        totalIndicators += 0.25f
+        
+        // Indicator 3: Overall body appears compressed vertically
+        val expectedTorsoHeight = 0.3f // Normal torso height ratio
+        if (torsoHeight < expectedTorsoHeight * 0.7f) {
+            lowAngleIndicators += 0.25f
+        }
+        totalIndicators += 0.25f
+        
+        // Indicator 4: Shoulders appear above hips (camera looking up)
+        if (shoulderY > hipY + 0.05f) { // Y increases downward in image coordinates
+            lowAngleIndicators += 0.2f
+        }
+        totalIndicators += 0.2f
+        
+        val angleConfidence = if (totalIndicators > 0f) lowAngleIndicators / totalIndicators else 0f
+        
+        // Classify camera angle based on indicators
+        val detectedAngle = when {
+            angleConfidence > 0.7f -> CameraAngle.GROUND_LEVEL
+            angleConfidence > 0.5f -> CameraAngle.LOW_ANGLE
+            angleConfidence > 0.3f -> CameraAngle.MID_ANGLE
+            else -> CameraAngle.HIGH_ANGLE
+        }
+        
+        // Update calibration
+        if (cameraAngleCalibrationCount < cameraAngleFrames) {
+            cameraAngleConfidence = (cameraAngleConfidence * cameraAngleCalibrationCount + angleConfidence) / (cameraAngleCalibrationCount + 1)
+            detectedCameraAngle = detectedAngle
+            cameraAngleCalibrationCount++
+            
+            debugInfo.apply {
+                put("camera_angle_calibration_progress", "$cameraAngleCalibrationCount/$cameraAngleFrames")
+                put("torso_aspect_ratio", torsoAspectRatio)
+                put("head_to_body_ratio", headToBodyRatio)
+                put("torso_height", torsoHeight)
+                put("angle_confidence", angleConfidence)
+                put("low_angle_indicators", lowAngleIndicators)
+            }
+            
+            if (cameraAngleCalibrationCount >= cameraAngleFrames) {
+                isCameraAngleEstablished = true
+                // Choose detection method based on camera angle
+                isUsingMovementDetection = (detectedCameraAngle == CameraAngle.LOW_ANGLE || 
+                                          detectedCameraAngle == CameraAngle.GROUND_LEVEL)
+                debugInfo.apply {
+                    put("camera_angle_established", true)
+                    put("final_camera_angle", detectedCameraAngle.name)
+                    put("final_camera_confidence", cameraAngleConfidence)
+                    put("using_movement_detection", isUsingMovementDetection)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Movement-based detection for low-angle/ground-level cameras
+     * CORE INNOVATION: Uses distance changes instead of absolute angles
+     */
+    private fun calculateMovementBasedAngle(normalizedPose: KeypointNormalizer.NormalizedPose): Float? {
+        val leftShoulder = normalizedPose.getLandmark(PoseLandmark.LEFT_SHOULDER)
+        val rightShoulder = normalizedPose.getLandmark(PoseLandmark.RIGHT_SHOULDER)
+        val leftWrist = normalizedPose.getLandmark(PoseLandmark.LEFT_WRIST)
+        val rightWrist = normalizedPose.getLandmark(PoseLandmark.RIGHT_WRIST)
+        
+        if (leftShoulder == null || rightShoulder == null || leftWrist == null || rightWrist == null) {
+            return null
+        }
+        
+        // Calculate shoulder-to-wrist distances (key for push-up motion)
+        val leftDistance = kotlin.math.sqrt(
+            (leftShoulder.x - leftWrist.x).let { it * it } +
+            (leftShoulder.y - leftWrist.y).let { it * it }
+        )
+        val rightDistance = kotlin.math.sqrt(
+            (rightShoulder.x - rightWrist.x).let { it * it } +
+            (rightShoulder.y - rightWrist.y).let { it * it }
+        )
+        
+        val avgDistance = (leftDistance + rightDistance) / 2f
+        
+        // Update movement history (circular buffer)
+        shoulderDistanceHistory[movementHistoryIndex] = avgDistance
+        movementHistoryIndex = (movementHistoryIndex + 1) % movementHistorySize
+        movementHistoryCount = minOf(movementHistoryCount + 1, movementHistorySize)
+        
+        if (movementHistoryCount < 3) {
+            return null
+        }
+        
+        // Calculate movement patterns
+        val validCount = minOf(movementHistoryCount, movementHistorySize)
+        val recentDistances = shoulderDistanceHistory.take(validCount)
+        val minDistance = recentDistances.minOrNull() ?: avgDistance
+        val maxDistance = recentDistances.maxOrNull() ?: avgDistance
+        val distanceRange = maxDistance - minDistance
+        
+        // Convert distance to pseudo-angle for compatibility with existing thresholds
+        // Shorter distance = arms bent = lower angle
+        // Longer distance = arms extended = higher angle
+        val normalizedDistance = if (distanceRange > 0.01f) {
+            (avgDistance - minDistance) / distanceRange
+        } else {
+            0.5f // Default middle position
+        }
+        
+        // Map to angle range suitable for push-up detection
+        val pseudoAngle = 70f + (normalizedDistance * 100f)  // Range: 70-170 degrees
+        
+        debugInfo.apply {
+            put("movement_avg_distance", avgDistance)
+            put("movement_min_distance", minDistance)
+            put("movement_max_distance", maxDistance)
+            put("movement_distance_range", distanceRange)
+            put("movement_normalized_distance", normalizedDistance)
+            put("movement_pseudo_angle", pseudoAngle)
+            put("movement_history_count", movementHistoryCount)
+        }
+        
+        return pseudoAngle
+    }
+    
+    /**
+     * Ground-aware angle calculation for higher cameras (legacy method enhanced)
+     */
+    private fun calculateGroundAwareAngle(normalizedPose: KeypointNormalizer.NormalizedPose): Float? {
+        // Legacy ground-level detection logic (simplified)
+        if (!isGroundLevelEstablished) {
+            establishGroundLevel(normalizedPose)
+        }
+        
+        // Calculate traditional elbow angles
+        val leftAngle = calculateContextualElbowAngle(normalizedPose, isLeft = true)
+        val rightAngle = calculateContextualElbowAngle(normalizedPose, isLeft = false)
+        
+        val validAngles = listOfNotNull(leftAngle, rightAngle)
+        if (validAngles.isEmpty()) {
+            return calculateFallbackAngle(normalizedPose)
+        }
+        
+        return validAngles.average().toFloat()
+    }
+    
+    /**
+     * Hybrid detection for unknown camera angles
+     */
+    private fun calculateHybridAngle(normalizedPose: KeypointNormalizer.NormalizedPose): Float? {
+        // Try both methods and use the most reliable one
+        val movementAngle = calculateMovementBasedAngle(normalizedPose)
+        val traditionalAngle = calculateGroundAwareAngle(normalizedPose)
+        
+        return when {
+            movementAngle != null && traditionalAngle != null -> {
+                // Average both methods for robustness
+                (movementAngle + traditionalAngle) / 2f
+            }
+            movementAngle != null -> movementAngle
+            traditionalAngle != null -> traditionalAngle
+            else -> null
+        }
+    }
+    
+    /**
+     * Adapt thresholds based on detected camera angle
+     */
+    private fun adaptThresholdsForCameraAngle() {
+        val range = maxObservedAngle - minObservedAngle
+        if (range < 25f || range > 120f) {
+            debugInfo["calibration_rejected_range"] = range
+            return
+        }
+        
+        when (detectedCameraAngle) {
+            CameraAngle.LOW_ANGLE, CameraAngle.GROUND_LEVEL -> {
+                // For low-angle cameras, use movement-based thresholds
+                // These are calibrated to the movement detection pseudo-angles
+                upElbowThreshold = maxOf(130f, maxObservedAngle - (range * 0.2f))
+                downElbowThreshold = maxOf(80f, minObservedAngle + (range * 0.3f))
+                debugInfo["threshold_adaptation"] = "low_angle_movement_based"
+            }
+            CameraAngle.HIGH_ANGLE -> {
+                // Traditional thresholds for high-angle cameras
+                upElbowThreshold = maxOf(140f, maxObservedAngle - (range * 0.15f))
+                downElbowThreshold = maxOf(90f, minObservedAngle + (range * 0.25f))
+                debugInfo["threshold_adaptation"] = "high_angle_traditional"
+            }
+            CameraAngle.MID_ANGLE -> {
+                // Balanced thresholds for mid-angle cameras
+                upElbowThreshold = maxOf(135f, maxObservedAngle - (range * 0.18f))
+                downElbowThreshold = maxOf(85f, minObservedAngle + (range * 0.28f))
+                debugInfo["threshold_adaptation"] = "mid_angle_balanced"
+            }
+            CameraAngle.UNKNOWN -> {
+                // Conservative thresholds for unknown camera angles
+                upElbowThreshold = maxOf(125f, maxObservedAngle - (range * 0.25f))
+                downElbowThreshold = maxOf(75f, minObservedAngle + (range * 0.35f))
+                debugInfo["threshold_adaptation"] = "unknown_conservative"
+            }
+        }
+        
+        debugInfo.apply {
+            put("calibrated_up_threshold", upElbowThreshold)
+            put("calibrated_down_threshold", downElbowThreshold)
+            put("observed_range", range)
+            put("camera_angle_calibration", detectedCameraAngle.name)
+        }
+    }
     private fun establishGroundLevel(normalizedPose: KeypointNormalizer.NormalizedPose) {
         if (isGroundLevelEstablished) {
             // Protect against ground level drift during exercise
@@ -546,8 +769,8 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     }
     
     /**
-     * Determine push-up phase using ground-level enhanced detection logic
-     * Uses context-aware thresholds based on ground contact state
+     * Determine push-up phase using camera-angle aware detection logic
+     * Uses adaptive thresholds based on detected camera positioning
      */
     override fun determinePhase(pose: Pose, primaryAngle: Float?): ExercisePhase {
         if (primaryAngle == null) {
@@ -562,22 +785,62 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         
         consecutiveLowConfidenceFrames = 0
         
-        // GROUND-AWARE PHASE DETECTION: Use dynamic thresholds based on ground contact
-        val effectiveUpThreshold = if (isInGroundPosition && groundContactConfidence > 0.7f) {
-            // When clearly in ground position, use higher thresholds (90+ degrees as requested)
-            maxOf(upElbowThreshold, 135f)  // Ensure minimum 135° for UP in ground position
-        } else {
-            upElbowThreshold
+        // CAMERA-ANGLE AWARE PHASE DETECTION: Use thresholds adapted to camera positioning
+        val effectiveUpThreshold = when (detectedCameraAngle) {
+            CameraAngle.LOW_ANGLE, CameraAngle.GROUND_LEVEL -> {
+                // For low-angle cameras using movement detection, use adjusted thresholds
+                if (isUsingMovementDetection) {
+                    maxOf(upElbowThreshold, 120f)  // Lower threshold for movement-based detection
+                } else {
+                    maxOf(upElbowThreshold, 135f)  // Traditional higher threshold
+                }
+            }
+            CameraAngle.HIGH_ANGLE -> {
+                // Traditional high thresholds for high-angle cameras
+                if (isInGroundPosition && groundContactConfidence > 0.7f) {
+                    maxOf(upElbowThreshold, 135f)
+                } else {
+                    upElbowThreshold
+                }
+            }
+            CameraAngle.MID_ANGLE -> {
+                // Balanced thresholds for mid-angle cameras
+                maxOf(upElbowThreshold, 125f)
+            }
+            CameraAngle.UNKNOWN -> {
+                // Conservative approach for unknown camera angles
+                upElbowThreshold
+            }
         }
         
-        val effectiveDownThreshold = if (isInGroundPosition && groundContactConfidence > 0.7f) {
-            // When clearly in ground position, use 90+ degrees for DOWN as requested
-            maxOf(downElbowThreshold, 90f)  // Ensure minimum 90° for DOWN in ground position
-        } else {
-            downElbowThreshold
+        val effectiveDownThreshold = when (detectedCameraAngle) {
+            CameraAngle.LOW_ANGLE, CameraAngle.GROUND_LEVEL -> {
+                // For low-angle cameras, use more sensitive down detection
+                if (isUsingMovementDetection) {
+                    maxOf(downElbowThreshold, 70f)  // More sensitive for movement detection
+                } else {
+                    maxOf(downElbowThreshold, 90f)  // Traditional threshold
+                }
+            }
+            CameraAngle.HIGH_ANGLE -> {
+                // Traditional thresholds for high-angle cameras
+                if (isInGroundPosition && groundContactConfidence > 0.7f) {
+                    maxOf(downElbowThreshold, 90f)
+                } else {
+                    downElbowThreshold
+                }
+            }
+            CameraAngle.MID_ANGLE -> {
+                // Balanced thresholds for mid-angle cameras
+                maxOf(downElbowThreshold, 80f)
+            }
+            CameraAngle.UNKNOWN -> {
+                // Conservative approach for unknown camera angles
+                downElbowThreshold
+            }
         }
         
-        // Enhanced phase detection with ground-level context
+        // Enhanced phase detection with camera-angle context
         val anglePhase = when {
             primaryAngle < effectiveDownThreshold -> ExercisePhase.DOWN
             primaryAngle > effectiveUpThreshold -> ExercisePhase.UP
@@ -587,16 +850,18 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         // Update comprehensive debug info
         debugInfo.apply {
             put("primary_angle", primaryAngle)
+            put("camera_angle_for_phase", detectedCameraAngle.name)
             put("base_up_threshold", upElbowThreshold)
             put("base_down_threshold", downElbowThreshold)
             put("effective_up_threshold", effectiveUpThreshold)
             put("effective_down_threshold", effectiveDownThreshold)
-            put("ground_adjusted_thresholds", isInGroundPosition && groundContactConfidence > 0.7f)
+            put("camera_angle_adjusted_thresholds", detectedCameraAngle != CameraAngle.UNKNOWN)
+            put("using_movement_thresholds", isUsingMovementDetection)
             put("raw_phase", anglePhase.name)
         }
         
-        // Validate with enhanced torso form analysis
-        val torsoPhase = validateWithGroundAwareTorsoForm(lastNormalizedPose, anglePhase)
+        // Validate with camera-angle aware torso form analysis
+        val torsoPhase = validateWithCameraAwareTorsoForm(lastNormalizedPose, anglePhase)
         debugInfo["torso_validated_phase"] = torsoPhase.name
         
         // Use debounced state machine
@@ -611,10 +876,10 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     
     
     /**
-     * Validate detected phase with ground-aware torso form analysis
-     * Enhanced validation that considers ground position context
+     * Validate detected phase with camera-angle aware torso form analysis
+     * Enhanced validation that considers camera positioning context
      */
-    private fun validateWithGroundAwareTorsoForm(
+    private fun validateWithCameraAwareTorsoForm(
         normalizedPose: KeypointNormalizer.NormalizedPose?,
         anglePhase: ExercisePhase
     ): ExercisePhase {
@@ -625,12 +890,28 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         
         val smoothedPitch = torsoPitchSmoother.addSample(torsoPitch)
         
-        // Ground-aware torso validation
-        val effectiveTorsoThreshold = if (isInGroundPosition && groundContactConfidence > 0.6f) {
-            // More forgiving torso requirements when clearly in ground position
-            torsoParallelThreshold + 15f  // Additional 15° tolerance for ground position
-        } else {
-            torsoParallelThreshold
+        // Camera-angle aware torso validation
+        val effectiveTorsoThreshold = when (detectedCameraAngle) {
+            CameraAngle.LOW_ANGLE, CameraAngle.GROUND_LEVEL -> {
+                // Very forgiving for low-angle cameras as torso angle appears different
+                torsoParallelThreshold + 25f  // Additional 25° tolerance for ground-level cameras
+            }
+            CameraAngle.HIGH_ANGLE -> {
+                // Traditional torso requirements for high-angle cameras
+                if (isInGroundPosition && groundContactConfidence > 0.6f) {
+                    torsoParallelThreshold + 15f
+                } else {
+                    torsoParallelThreshold
+                }
+            }
+            CameraAngle.MID_ANGLE -> {
+                // Moderate tolerance for mid-angle cameras
+                torsoParallelThreshold + 10f
+            }
+            CameraAngle.UNKNOWN -> {
+                // Very forgiving when camera angle is unknown
+                torsoParallelThreshold + 20f
+            }
         }
         
         // Update debug info
@@ -639,16 +920,23 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
             put("torso_pitch_smoothed", smoothedPitch)
             put("torso_threshold_base", torsoParallelThreshold)
             put("torso_threshold_effective", effectiveTorsoThreshold)
-            put("ground_torso_adjustment", isInGroundPosition && groundContactConfidence > 0.6f)
+            put("camera_angle_torso_adjustment", detectedCameraAngle.name)
+            put("torso_adjustment_amount", effectiveTorsoThreshold - torsoParallelThreshold)
         }
         
         // For good form push-ups, torso should remain relatively parallel to ground
-        // Extra forgiving for ground position detection
+        // Extra forgiving based on camera angle
         val isGoodForm = abs(smoothedPitch) < effectiveTorsoThreshold
         debugInfo["torso_good_form"] = isGoodForm
         
-        // Only reject DOWN phase if form is really bad - very forgiving for ground position
-        val rejectionThreshold = if (isInGroundPosition) 65f else 50f
+        // Only reject DOWN phase if form is really bad - very forgiving for low-angle cameras
+        val rejectionThreshold = when (detectedCameraAngle) {
+            CameraAngle.LOW_ANGLE, CameraAngle.GROUND_LEVEL -> 75f  // Very forgiving
+            CameraAngle.HIGH_ANGLE -> 50f  // Traditional
+            CameraAngle.MID_ANGLE -> 60f   // Moderate
+            CameraAngle.UNKNOWN -> 70f     // Conservative
+        }
+        
         val shouldReject = !isGoodForm && anglePhase == ExercisePhase.DOWN && abs(smoothedPitch) > rejectionThreshold
         debugInfo["torso_rejected"] = shouldReject
         debugInfo["torso_rejection_threshold"] = rejectionThreshold
@@ -788,7 +1076,7 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     }
     
     /**
-     * Reset detector state including ground-level detection components
+     * Reset detector state including camera angle detection and movement-based components
      */
     override fun reset() {
         super.reset()
@@ -805,10 +1093,23 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         maxObservedAngle = 0f
         minObservedAngle = 180f
         isCalibrated = false
-        upElbowThreshold = 140f // Reset to ground-aware defaults
-        downElbowThreshold = 90f // 90+ degrees as requested
+        upElbowThreshold = 140f // Reset to adaptive defaults
+        downElbowThreshold = 90f // Reset to adaptive defaults
         
-        // Reset ground-level detection state
+        // Reset camera angle detection state
+        detectedCameraAngle = CameraAngle.UNKNOWN
+        cameraAngleConfidence = 0f
+        cameraAngleCalibrationCount = 0
+        isCameraAngleEstablished = false
+        isUsingMovementDetection = false
+        
+        // Reset movement-based detection state
+        shoulderDistanceHistory.fill(0f)
+        wristDistanceHistory.fill(0f)
+        movementHistoryIndex = 0
+        movementHistoryCount = 0
+        
+        // Reset ground-level detection state (for legacy compatibility)
         groundLevel = null
         handLevel = null
         bodyBaselineY = null
