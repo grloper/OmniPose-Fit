@@ -151,6 +151,12 @@ class ModularPushUpDetectorTest {
         assertEquals(ExercisePhase.TRANSITIONING, state.phase) // Initially transitioning
     }
     
+    @Test
+    fun instantiate() {
+        val d = PushUpDetector()
+        assertEquals(ExerciseType.PUSH_UP, d.exerciseType)
+    }
+    
     private fun createMockPoseWithArmAngle(targetAngle: Double): Pose {
         val pose = mockk<Pose>()
         

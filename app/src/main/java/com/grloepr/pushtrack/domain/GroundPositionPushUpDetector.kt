@@ -43,7 +43,7 @@ class GroundPositionPushUpDetector {
     private val shoulderWidthUpThreshold = 0.9f // Shoulders are wide (person is up)
     private val shoulderWidthDownThreshold = 0.7f // Shoulders are narrower (person is down)
     private val elbowAngleUpThreshold = 150f    // Arm is straight
-    private val elbowAngleDownThreshold = 110f  // Arm is bent
+    private val elbowAngleDownThreshold = 50f  // Arm is bent
     
     // Position tracking
     private var baselineHeadHeight: Float? = null

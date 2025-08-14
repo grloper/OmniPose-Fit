@@ -1,8 +1,5 @@
 package com.grloepr.pushtrack.detection
 
-import com.grloepr.pushtrack.detection.utils.TemporalSmoother
-import com.grloepr.pushtrack.detection.utils.DebouncedStateMachine
-import com.grloepr.pushtrack.detection.utils.ConfidenceRepCounter
 import org.junit.Before
 import org.junit.Test
 import org.junit.Assert.*
@@ -12,15 +9,8 @@ import org.junit.Assert.*
  */
 class EnhancedDetectionUtilsTest {
     
-    private lateinit var temporalSmoother: TemporalSmoother
-    private lateinit var stateMachine: DebouncedStateMachine
-    private lateinit var repCounter: ConfidenceRepCounter
-    
     @Before
     fun setup() {
-        temporalSmoother = TemporalSmoother()
-        stateMachine = DebouncedStateMachine(confirmationThreshold = 3)
-        repCounter = ConfidenceRepCounter()
     }
     
     @Test

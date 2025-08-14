@@ -40,8 +40,10 @@ class PostureAnalyzer {
             analyzeFormIssues(pose, currentState)?.also {
                 lastFeedbackTime = timestamp
             }
-        } else null
-        
+        } else {
+            null
+        }
+
         return PostureAnalysisResult(
             formQuality = formQuality,
             averageFormQuality = formQualityHistory.average().toFloat(),
@@ -209,8 +211,8 @@ class PostureAnalyzer {
         
         // Ideal hand position is roughly shoulder-width apart
         val handDistance = distance(leftWrist.position, rightWrist.position)
-        val shoulderDistance = distance(leftShoulder.position, rightShoulder.position)
-        
+        val shoulderDistance = distance(leftShoulder.position, rightWrist.position)
+
         val ratio = handDistance / shoulderDistance
         val idealRatio = 1.2f // Slightly wider than shoulders
         

@@ -157,6 +157,12 @@ class SquatDetectorTest {
         assertEquals("knee_angle", squatDetector.state.value.detectionMethod)
     }
     
+    @Test
+    fun instantiate() {
+        val d = SquatDetector()
+        assertEquals(ExerciseType.SQUAT, d.exerciseType)
+    }
+    
     private fun createMockPoseWithKneeAngle(targetAngle: Double): Pose {
         val pose = mockk<Pose>()
         

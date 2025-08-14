@@ -1,3 +1,19 @@
 <resources>
     <string name="app_name">PushTrack</string>
+    
+    <!-- Exercise Guidance Descriptions -->
+    <string name="push_up_start_desc">Starting position: Arms extended, body straight</string>
+    <string name="push_up_down_desc">Down position: Arms bent, chest near ground</string>
+    <string name="push_up_up_desc">Up position: Return to starting position with arms extended</string>
+    
+    <string name="pull_up_start_desc">Starting position: Grip bar with hands shoulder-width apart</string>
+    <string name="pull_up_down_desc">Hanging position: Arms extended, body straight</string>
+    <string name="pull_up_up_desc">Up position: Chin above bar, chest toward bar</string>
+    
+    <string name="squat_start_desc">Starting position: Feet shoulder-width apart, toes slightly out</string>
+    <string name="squat_down_desc">Down position: Hips back and down, knees at 90°</string>
+    <string name="squat_up_desc">Up position: Standing tall, knees and hips extended</string>
+    
+    <!-- Exercise Image Descriptions -->
+    <string name="image_desc_exercise_form">Exercise form guidance image</string>
 </resources>
