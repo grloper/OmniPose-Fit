@@ -412,6 +412,42 @@ private fun CameraPreviewScreen() {
                 )
             }
         }
+        
+        // Debug information display
+        if (showDebugInfo && detector is com.grloepr.pushtrack.detection.PushUpDetector) {
+            val pushUpDetector = detector as com.grloepr.pushtrack.detection.PushUpDetector
+            val debugInfo = pushUpDetector.getDebugInfo()
+            
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .width(300.dp),
+                color = Color.Black.copy(0.8f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Text(
+                        text = "Push-Up Debug Info",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    debugInfo.forEach { (key, value) ->
+                        Text(
+                            text = "$key: $value",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 
     // Auto clear rep status message
@@ -834,11 +870,12 @@ private fun evaluateVisibility(pose: Pose, exerciseType: ExerciseType): Pair<Boo
     val landmarks = pose.allPoseLandmarks
     if (landmarks.isEmpty()) return false to "No person detected. Step into camera view."
     
-    val high = landmarks.filter { it.inFrameLikelihood >= 0.6f }
-    if (high.size < 10) return false to "Move closer or improve lighting."
+    // More forgiving visibility requirements
+    val high = landmarks.filter { it.inFrameLikelihood >= 0.4f } // Lowered from 0.6f
+    if (high.size < 8) return false to "Move closer or improve lighting." // Lowered from 10
     
     fun need(vararg ids: Int): Boolean =
-        ids.all { id -> pose.getPoseLandmark(id)?.inFrameLikelihood ?: 0f >= 0.6f }
+        ids.all { id -> pose.getPoseLandmark(id)?.inFrameLikelihood ?: 0f >= 0.4f } // Lowered from 0.6f
 
     val coreOk = need(
         PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
@@ -854,14 +891,16 @@ private fun evaluateVisibility(pose: Pose, exerciseType: ExerciseType): Pair<Boo
             val lSh = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
             val lHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
             
-            if (nose?.inFrameLikelihood ?: 0f < 0.7f) {
-                return false to "Position camera above you. Look down at the ground."
+            // More forgiving nose detection - push-ups don't always need perfect face visibility
+            if (nose?.inFrameLikelihood ?: 0f < 0.4f) {
+                return false to "Position camera above you for better detection."
             }
             
+            // More forgiving torso length requirements
             if (lSh != null && lHip != null) {
                 val torsoLength = abs(lSh.position.y - lHip.position.y)
-                if (torsoLength < 60f) {
-                    return false to "Move camera higher to see your full body."
+                if (torsoLength < 40f) { // Lowered from 60f
+                    return false to "Move camera higher to see your torso better."
                 }
             }
         }

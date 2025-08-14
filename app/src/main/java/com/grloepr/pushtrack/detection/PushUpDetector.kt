@@ -17,21 +17,31 @@ import kotlin.math.min
  */
 class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     
-    // Normalized thresholds (scale-invariant) - TUNED for better accuracy
-    private val upElbowThreshold = 130f    // Arms extended (reduced from 140)
-    private val downElbowThreshold = 90f   // Arms bent (increased from 80)
-    private val torsoParallelThreshold = 20f // Max degrees from horizontal for good form (increased tolerance)
+    // Normalized thresholds (scale-invariant) - TUNED for real-world conditions
+    private var upElbowThreshold = 120f    // Arms extended (more forgiving for range of motion)
+    private var downElbowThreshold = 100f  // Arms bent (more realistic for most people)
+    private val torsoParallelThreshold = 35f // Max degrees from horizontal for good form (very forgiving)
     
-    // Advanced processing components - TUNED for responsiveness  
-    private val angleSmoother = TemporalSmoother(emaAlpha = 0.25f) // More responsive
-    private val torsoPitchSmoother = TemporalSmoother(emaAlpha = 0.3f) // More responsive
-    private val stateMachine = DebouncedStateMachine(confirmationThreshold = 2) // Faster response
+    // Adaptive calibration for personalized thresholds
+    private var calibrationFrames = 0
+    private var maxObservedAngle = 0f
+    private var minObservedAngle = 180f
+    private val calibrationPeriod = 50 // Frames to observe before adapting
+    private var isCalibrated = false
+    
+    // Advanced processing components - TUNED for maximum responsiveness  
+    private val angleSmoother = TemporalSmoother(emaAlpha = 0.4f) // Much more responsive
+    private val torsoPitchSmoother = TemporalSmoother(emaAlpha = 0.5f) // Much more responsive
+    private val stateMachine = DebouncedStateMachine(confirmationThreshold = 1) // Immediate response
     private val repCounter = ConfidenceRepCounter()
     
     // Enhanced tracking
     private var lastNormalizedPose: KeypointNormalizer.NormalizedPose? = null
     private var consecutiveLowConfidenceFrames = 0
     private val maxLowConfidenceFrames = 5
+    
+    // Debug tracking for troubleshooting
+    private var debugInfo = mutableMapOf<String, Any>()
     
     
     /**
@@ -46,12 +56,96 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         val rightAngle = calculateNormalizedElbowAngle(normalizedPose, isLeft = false)
         
         val validAngles = listOfNotNull(leftAngle, rightAngle)
-        if (validAngles.isEmpty()) return null
+        var averageAngle: Float? = null
         
-        val averageAngle = validAngles.average().toFloat()
+        // Primary detection method - elbow angles
+        if (validAngles.isNotEmpty()) {
+            averageAngle = validAngles.average().toFloat()
+        } else {
+            // Fallback method - shoulder-to-wrist distance variation (for occluded elbows)
+            averageAngle = calculateFallbackAngle(normalizedPose)
+        }
+        
+        if (averageAngle == null) return null
+        
+        // Adaptive calibration - observe user's range of motion
+        if (!isCalibrated && calibrationFrames < calibrationPeriod) {
+            maxObservedAngle = maxOf(maxObservedAngle, averageAngle)
+            minObservedAngle = minOf(minObservedAngle, averageAngle)
+            calibrationFrames++
+            
+            if (calibrationFrames >= calibrationPeriod) {
+                // Adapt thresholds based on observed range
+                val range = maxObservedAngle - minObservedAngle
+                if (range > 20f) { // Only adapt if we see meaningful range
+                    upElbowThreshold = maxObservedAngle - (range * 0.2f) // 80% of max
+                    downElbowThreshold = minObservedAngle + (range * 0.2f) // 20% above min
+                    isCalibrated = true
+                    debugInfo["calibrated_up_threshold"] = upElbowThreshold
+                    debugInfo["calibrated_down_threshold"] = downElbowThreshold
+                    debugInfo["observed_range"] = range
+                }
+            }
+        }
+        
+        // Update debug info
+        debugInfo["left_elbow_angle"] = leftAngle ?: "null"
+        debugInfo["right_elbow_angle"] = rightAngle ?: "null"
+        debugInfo["average_angle"] = averageAngle
+        debugInfo["valid_angles_count"] = validAngles.size
+        debugInfo["calibration_progress"] = calibrationFrames
+        debugInfo["is_calibrated"] = isCalibrated
+        debugInfo["using_fallback"] = validAngles.isEmpty()
         
         // Apply temporal smoothing
-        return angleSmoother.addSample(averageAngle)
+        val smoothedAngle = angleSmoother.addSample(averageAngle)
+        debugInfo["smoothed_angle"] = smoothedAngle
+        
+        return smoothedAngle
+    }
+    
+    /**
+     * Fallback detection method using shoulder-to-wrist distance
+     * Used when elbow landmarks are occluded or have low confidence
+     */
+    private fun calculateFallbackAngle(normalizedPose: KeypointNormalizer.NormalizedPose): Float? {
+        val leftShoulder = normalizedPose.getLandmark(PoseLandmark.LEFT_SHOULDER)
+        val rightShoulder = normalizedPose.getLandmark(PoseLandmark.RIGHT_SHOULDER)
+        val leftWrist = normalizedPose.getLandmark(PoseLandmark.LEFT_WRIST)
+        val rightWrist = normalizedPose.getLandmark(PoseLandmark.RIGHT_WRIST)
+        
+        val validDistances = mutableListOf<Float>()
+        
+        // Calculate shoulder-to-wrist distances
+        if (leftShoulder != null && leftWrist != null && 
+            leftShoulder.confidence > 0.3f && leftWrist.confidence > 0.3f) {
+            val leftDistance = kotlin.math.sqrt(
+                (leftShoulder.x - leftWrist.x).let { it * it } +
+                (leftShoulder.y - leftWrist.y).let { it * it }
+            )
+            validDistances.add(leftDistance)
+        }
+        
+        if (rightShoulder != null && rightWrist != null &&
+            rightShoulder.confidence > 0.3f && rightWrist.confidence > 0.3f) {
+            val rightDistance = kotlin.math.sqrt(
+                (rightShoulder.x - rightWrist.x).let { it * it } +
+                (rightShoulder.y - rightWrist.y).let { it * it }
+            )
+            validDistances.add(rightDistance)
+        }
+        
+        if (validDistances.isEmpty()) return null
+        
+        // Convert distance to pseudo-angle (shorter distance = more bent = lower angle)
+        val avgDistance = validDistances.average().toFloat()
+        // Map distance to angle range approximately
+        val pseudoAngle = (avgDistance * 200f).coerceIn(60f, 160f)
+        
+        debugInfo["fallback_avg_distance"] = avgDistance
+        debugInfo["fallback_pseudo_angle"] = pseudoAngle
+        
+        return pseudoAngle
     }
     
     /**
@@ -69,8 +163,8 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         val elbow = normalizedPose.getLandmark(elbowType) ?: return null
         val wrist = normalizedPose.getLandmark(wristType) ?: return null
         
-        // Require reasonable confidence for angle calculation (lowered threshold)
-        if (shoulder.confidence < 0.6f || elbow.confidence < 0.6f || wrist.confidence < 0.6f) {
+        // Require reasonable confidence for angle calculation (lowered threshold for real-world conditions)
+        if (shoulder.confidence < 0.4f || elbow.confidence < 0.4f || wrist.confidence < 0.4f) {
             return null
         }
         
@@ -83,6 +177,7 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
     override fun determinePhase(pose: Pose, primaryAngle: Float?): ExercisePhase {
         if (primaryAngle == null) {
             consecutiveLowConfidenceFrames++
+            debugInfo["consecutive_low_confidence"] = consecutiveLowConfidenceFrames
             return if (consecutiveLowConfidenceFrames > maxLowConfidenceFrames) {
                 ExercisePhase.TRANSITIONING
             } else {
@@ -99,11 +194,22 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
             else -> ExercisePhase.TRANSITIONING
         }
         
+        // Update debug info
+        debugInfo["primary_angle"] = primaryAngle
+        debugInfo["up_threshold"] = upElbowThreshold
+        debugInfo["down_threshold"] = downElbowThreshold
+        debugInfo["raw_phase"] = anglePhase.name
+        
         // Validate with torso parallelism for good form
         val torsoPhase = validateWithTorsoForm(lastNormalizedPose, anglePhase)
+        debugInfo["torso_validated_phase"] = torsoPhase.name
         
         // Use debounced state machine
-        return stateMachine.updateState(torsoPhase)
+        val finalPhase = stateMachine.updateState(torsoPhase)
+        debugInfo["final_phase"] = finalPhase.name
+        debugInfo["state_machine_transitioning"] = stateMachine.isTransitioning()
+        
+        return finalPhase
     }
     
     
@@ -121,12 +227,21 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         
         val smoothedPitch = torsoPitchSmoother.addSample(torsoPitch)
         
+        // Update debug info
+        debugInfo["torso_pitch_raw"] = torsoPitch
+        debugInfo["torso_pitch_smoothed"] = smoothedPitch
+        debugInfo["torso_threshold"] = torsoParallelThreshold
+        
         // For good form push-ups, torso should remain relatively parallel to ground
         // More forgiving for real-world conditions
         val isGoodForm = abs(smoothedPitch) < torsoParallelThreshold
+        debugInfo["torso_good_form"] = isGoodForm
         
-        // Only reject DOWN phase if form is really bad (>30 degrees)
-        return if (!isGoodForm && anglePhase == ExercisePhase.DOWN && abs(smoothedPitch) > 30f) {
+        // Only reject DOWN phase if form is really bad (>50 degrees) - very forgiving
+        val shouldReject = !isGoodForm && anglePhase == ExercisePhase.DOWN && abs(smoothedPitch) > 50f
+        debugInfo["torso_rejected"] = shouldReject
+        
+        return if (shouldReject) {
             ExercisePhase.TRANSITIONING
         } else {
             anglePhase
@@ -243,8 +358,13 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
             "torso_form_quality" to calculateFormQuality(),
             "state_machine_progress" to stateMachine.getTransitionProgress(),
             "is_transitioning" to stateMachine.isTransitioning()
-        )
+        ) + debugInfo // Include all debug information
     }
+    
+    /**
+     * Get current debug information for troubleshooting
+     */
+    fun getDebugInfo(): Map<String, Any> = debugInfo.toMap()
     
     /**
      * Calculate form quality based on torso alignment
@@ -266,5 +386,14 @@ class PushUpDetector : BaseExerciseDetector(ExerciseType.PUSH_UP) {
         repCounter.reset()
         lastNormalizedPose = null
         consecutiveLowConfidenceFrames = 0
+        debugInfo.clear()
+        
+        // Reset calibration
+        calibrationFrames = 0
+        maxObservedAngle = 0f
+        minObservedAngle = 180f
+        isCalibrated = false
+        upElbowThreshold = 120f // Reset to defaults
+        downElbowThreshold = 100f
     }
 }
