@@ -2,6 +2,8 @@ package com.grloepr.pushtrack.analysis
 
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
+import com.grloepr.pushtrack.domain.ExerciseState
+import com.grloepr.pushtrack.domain.ExerciseType
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Assert.*
@@ -22,27 +24,28 @@ class PushUpDetectorTest {
     @Test
     fun `initial state should have zero reps`() {
         assertEquals(0, pushUpDetector.getRepCount())
-        assertEquals(PushUpState.UNKNOWN, pushUpDetector.getCurrentState())
+        assertEquals(ExerciseState.UNKNOWN, pushUpDetector.getCurrentState())
+        assertEquals(ExerciseType.PUSH_UP, pushUpDetector.exerciseType)
     }
     
     @Test
     fun `should detect down position with small arm angle`() {
         val pose = createMockPoseWithArmAngle(80.0) // Less than down threshold (90)
         
-        val repCount = pushUpDetector.processPose(pose)
+        val result = pushUpDetector.processPose(pose)
         
-        assertEquals(0, repCount) // No rep counted yet
-        assertEquals(PushUpState.DOWN_POSITION, pushUpDetector.getCurrentState())
+        assertEquals(0, result.repCount) // No rep counted yet
+        assertEquals(ExerciseState.END_POSITION, result.currentState)
     }
     
     @Test
     fun `should detect up position with large arm angle`() {
         val pose = createMockPoseWithArmAngle(170.0) // Greater than up threshold (160)
         
-        val repCount = pushUpDetector.processPose(pose)
+        val result = pushUpDetector.processPose(pose)
         
-        assertEquals(0, repCount) // No rep counted yet
-        assertEquals(PushUpState.UP_POSITION, pushUpDetector.getCurrentState())
+        assertEquals(0, result.repCount) // No rep counted yet
+        assertEquals(ExerciseState.START_POSITION, result.currentState)
     }
     
     @Test
@@ -50,14 +53,14 @@ class PushUpDetectorTest {
         // First, go to down position
         val downPose = createMockPoseWithArmAngle(80.0)
         pushUpDetector.processPose(downPose)
-        assertEquals(PushUpState.DOWN_POSITION, pushUpDetector.getCurrentState())
+        assertEquals(ExerciseState.END_POSITION, pushUpDetector.getCurrentState())
         
         // Then, go to up position - should count a rep
         val upPose = createMockPoseWithArmAngle(170.0)
-        val repCount = pushUpDetector.processPose(upPose)
+        val result = pushUpDetector.processPose(upPose)
         
-        assertEquals(1, repCount)
-        assertEquals(PushUpState.UP_POSITION, pushUpDetector.getCurrentState())
+        assertEquals(1, result.repCount)
+        assertEquals(ExerciseState.START_POSITION, result.currentState)
     }
     
     @Test
@@ -80,28 +83,32 @@ class PushUpDetectorTest {
     @Test
     fun `should reset counter correctly`() {
         // Count some reps first
-        pushUpDetector.processPose(createMockPoseWithArmAngle(80.0))
-        pushUpDetector.processPose(createMockPoseWithArmAngle(170.0))
+        val downPose = createMockPoseWithArmAngle(80.0)
+        val upPose = createMockPoseWithArmAngle(170.0)
+        pushUpDetector.processPose(downPose)
+        pushUpDetector.processPose(upPose)
         assertEquals(1, pushUpDetector.getRepCount())
         
         // Reset
         pushUpDetector.reset()
         
         assertEquals(0, pushUpDetector.getRepCount())
-        assertEquals(PushUpState.UNKNOWN, pushUpDetector.getCurrentState())
+        assertEquals(ExerciseState.UNKNOWN, pushUpDetector.getCurrentState())
     }
     
     @Test
     fun `should not count rep when transitioning from up to down`() {
         // Start in up position
-        pushUpDetector.processPose(createMockPoseWithArmAngle(170.0))
-        assertEquals(PushUpState.UP_POSITION, pushUpDetector.getCurrentState())
+        val upPose = createMockPoseWithArmAngle(170.0)
+        pushUpDetector.processPose(upPose)
+        assertEquals(ExerciseState.START_POSITION, pushUpDetector.getCurrentState())
         
         // Go to down position - should not count a rep
-        val repCount = pushUpDetector.processPose(createMockPoseWithArmAngle(80.0))
+        val downPose = createMockPoseWithArmAngle(80.0)
+        val result = pushUpDetector.processPose(downPose)
         
-        assertEquals(0, repCount)
-        assertEquals(PushUpState.DOWN_POSITION, pushUpDetector.getCurrentState())
+        assertEquals(0, result.repCount)
+        assertEquals(ExerciseState.END_POSITION, result.currentState)
     }
     
     @Test

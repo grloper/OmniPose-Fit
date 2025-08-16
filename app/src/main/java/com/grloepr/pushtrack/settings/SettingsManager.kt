@@ -43,6 +43,14 @@ class SettingsManager(context: Context) {
     private val _feedbackSensitivity = MutableStateFlow(prefs.getFloat(KEY_FEEDBACK_SENSITIVITY, 0.7f))
     val feedbackSensitivity: StateFlow<Float> = _feedbackSensitivity.asStateFlow()
     
+    // Settings UI state
+    private val _showSettings = MutableStateFlow(false)
+    val showSettings: StateFlow<Boolean> = _showSettings.asStateFlow()
+    
+    // Overlay mode setting
+    private val _overlayMode = MutableStateFlow(prefs.getString(KEY_OVERLAY_MODE, "enhanced") ?: "enhanced")
+    val overlayMode: StateFlow<String> = _overlayMode.asStateFlow()
+    
     /**
      * Update voice enabled setting
      */
@@ -112,6 +120,21 @@ class SettingsManager(context: Context) {
     }
     
     /**
+     * Toggle settings visibility
+     */
+    fun toggleSettings() {
+        _showSettings.value = !_showSettings.value
+    }
+    
+    /**
+     * Set overlay mode
+     */
+    fun setOverlayMode(mode: String) {
+        _overlayMode.value = mode
+        prefs.edit().putString(KEY_OVERLAY_MODE, mode).apply()
+    }
+    
+    /**
      * Reset all settings to defaults
      */
     fun resetToDefaults() {
@@ -148,6 +171,7 @@ class SettingsManager(context: Context) {
         private const val KEY_ENHANCED_UI = "enhanced_ui"
         private const val KEY_POSTURE_ANALYSIS = "posture_analysis"
         private const val KEY_FEEDBACK_SENSITIVITY = "feedback_sensitivity"
+        private const val KEY_OVERLAY_MODE = "overlay_mode"
     }
 }
 
