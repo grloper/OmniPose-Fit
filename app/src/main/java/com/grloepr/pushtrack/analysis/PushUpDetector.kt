@@ -2,6 +2,7 @@ package com.grloepr.pushtrack.analysis
 
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
+import com.grloepr.pushtrack.domain.*
 import com.grloepr.pushtrack.feedback.PostureAnalyzer
 import com.grloepr.pushtrack.feedback.PostureAnalysisResult
 import kotlin.math.*
@@ -27,7 +28,9 @@ data class PushUpResult(
 /**
  * Detects push-up movements from pose data
  */
-class PushUpDetector {
+class PushUpDetector : ExerciseDetector {
+    
+    override val exerciseType = ExerciseType.PUSH_UP
     
     private var currentState = PushUpState.UNKNOWN
     private var repCount = 0
@@ -40,11 +43,11 @@ class PushUpDetector {
     private val upThreshold = 160.0 // degrees - elbow angle when in up position
     
     /**
-     * Process a pose and update push-up count with form analysis
+     * Process a pose and update push-up count with form analysis (implements ExerciseDetector)
      * @param pose The detected pose
-     * @return PushUpResult with count and analysis
+     * @return DetectionResult with count, state, and analysis
      */
-    fun processPoseWithAnalysis(pose: Pose): PushUpResult {
+    override fun processPose(pose: Pose): DetectionResult {
         val armAngle = calculateArmAngle(pose)
         var newRepCount = repCount
         
@@ -67,9 +70,58 @@ class PushUpDetector {
         // Analyze posture
         val postureAnalysis = postureAnalyzer.analyzePose(pose, currentState)
         
-        return PushUpResult(
+        // Convert to generic ExerciseState
+        val exerciseState = when (currentState) {
+            PushUpState.UP_POSITION -> ExerciseState.START_POSITION
+            PushUpState.DOWN_POSITION -> ExerciseState.END_POSITION
+            PushUpState.UNKNOWN -> ExerciseState.UNKNOWN
+        }
+        
+        // Convert posture analysis to FormQuality
+        val formQuality = postureAnalysis?.let {
+            FormQuality(
+                score = it.formQuality,
+                hasGoodForm = it.hasGoodForm,
+                feedback = it.feedback?.toString()
+            )
+        }
+        
+        return DetectionResult(
             repCount = newRepCount,
-            currentState = currentState,
+            currentState = exerciseState,
+            formQuality = formQuality,
+            confidence = if (armAngle != null) 0.8f else 0f,
+            lastAngle = armAngle?.toFloat()
+        )
+    }
+    
+    /**
+     * Process a pose and update push-up count with form analysis (legacy method for compatibility)
+     * @param pose The detected pose
+     * @return PushUpResult with count and analysis
+     */
+    fun processPoseWithAnalysis(pose: Pose): PushUpResult {
+        val result = processPose(pose)
+        
+        // Convert back to legacy format
+        val pushUpState = when (result.currentState) {
+            ExerciseState.START_POSITION -> PushUpState.UP_POSITION
+            ExerciseState.END_POSITION -> PushUpState.DOWN_POSITION
+            ExerciseState.UNKNOWN, ExerciseState.TRANSITIONING -> PushUpState.UNKNOWN
+        }
+        
+        val postureAnalysis = result.formQuality?.let {
+            PostureAnalysisResult(
+                formQuality = it.score,
+                averageFormQuality = it.score, // Simplified for compatibility
+                feedback = null, // Will be handled by the analyzer
+                hasGoodForm = it.hasGoodForm
+            )
+        }
+        
+        return PushUpResult(
+            repCount = result.repCount,
+            currentState = pushUpState,
             postureAnalysis = postureAnalysis
         )
     }
@@ -79,8 +131,8 @@ class PushUpDetector {
      * @param pose The detected pose
      * @return Current rep count
      */
-    fun processPose(pose: Pose): Int {
-        return processPoseWithAnalysis(pose).repCount
+    fun processPoseOld(pose: Pose): Int {
+        return processPose(pose).repCount
     }
     
     /**
@@ -151,21 +203,32 @@ class PushUpDetector {
     }
     
     /**
-     * Reset the rep counter and posture analyzer
+     * Reset the rep counter and posture analyzer (implements ExerciseDetector)
      */
-    fun reset() {
+    override fun reset() {
         repCount = 0
         currentState = PushUpState.UNKNOWN
         postureAnalyzer.reset()
     }
     
     /**
-     * Get current rep count
+     * Get current rep count (implements ExerciseDetector)
      */
-    fun getRepCount(): Int = repCount
+    override fun getRepCount(): Int = repCount
     
     /**
-     * Get current state
+     * Get current state (implements ExerciseDetector)
      */
-    fun getCurrentState(): PushUpState = currentState
+    override fun getCurrentState(): ExerciseState {
+        return when (currentState) {
+            PushUpState.UP_POSITION -> ExerciseState.START_POSITION
+            PushUpState.DOWN_POSITION -> ExerciseState.END_POSITION
+            PushUpState.UNKNOWN -> ExerciseState.UNKNOWN
+        }
+    }
+    
+    /**
+     * Get current state (legacy method for compatibility)
+     */
+    fun getCurrentStateLegacy(): PushUpState = currentState
 }

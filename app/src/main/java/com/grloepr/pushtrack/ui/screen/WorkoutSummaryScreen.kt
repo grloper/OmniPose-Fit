@@ -25,6 +25,7 @@ data class WorkoutSummary(
     val averageFormQuality: Float,
     val duration: Long, // in milliseconds
     val goodFormReps: Int,
+    val exerciseType: com.grloepr.pushtrack.domain.ExerciseType = com.grloepr.pushtrack.domain.ExerciseType.PUSH_UP,
     val timestamp: Long = System.currentTimeMillis()
 )
 
