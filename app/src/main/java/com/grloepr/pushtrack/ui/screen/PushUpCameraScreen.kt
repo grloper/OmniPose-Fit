@@ -107,13 +107,16 @@ private fun CameraPreviewScreen() {
     // Collect pose results and process push-ups
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collect { poseResult ->
+            android.util.Log.d("PushUpCameraScreen", "Received pose result with ${poseResult.pose.allPoseLandmarks.size} landmarks")
             currentPoseResult = poseResult
             
             // Process pose for push-up detection with enhanced analysis
             val newResult = pushUpDetector.processPoseWithAnalysis(poseResult.pose)
+            android.util.Log.d("PushUpCameraScreen", "Push-up result: reps=${newResult.repCount}, state=${newResult.currentState}")
             
             // Announce new rep count
             if (newResult.repCount > pushUpResult.repCount) {
+                android.util.Log.d("PushUpCameraScreen", "New rep counted: ${newResult.repCount}")
                 voiceFeedbackManager.announceRepCount(newResult.repCount)
             }
             

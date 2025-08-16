@@ -71,8 +71,19 @@ class PushUpDetector : ExerciseDetector {
             currentState = newState
         }
         
-        // Analyze posture
-        val postureAnalysis = postureAnalyzer.analyzePose(pose, currentState)
+        // Analyze posture - handle potential exceptions gracefully
+        val postureAnalysis = try {
+            postureAnalyzer.analyzePose(pose, currentState)
+        } catch (e: Exception) {
+            android.util.Log.e("PushUpDetector", "PostureAnalyzer failed: ${e.message}", e)
+            // Return a default analysis to avoid breaking detection
+            PostureAnalysisResult(
+                formQuality = 75f,
+                averageFormQuality = 75f,
+                feedback = null,
+                hasGoodForm = true
+            )
+        }
         
         return PushUpResult(
             repCount = newRepCount,
