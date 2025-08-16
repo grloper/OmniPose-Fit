@@ -3,6 +3,8 @@ package com.grloepr.pushtrack.feedback
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 import com.grloepr.pushtrack.analysis.PushUpState
+import com.grloepr.pushtrack.domain.ExerciseState
+import com.grloepr.pushtrack.domain.ExerciseType
 import kotlin.math.*
 
 /**
@@ -19,20 +21,32 @@ class PostureAnalyzer {
     private val feedbackCooldownMs = 3000L // 3 seconds between feedback
     
     /**
-     * Analyze pose and return posture feedback
+     * Analyze pose and return posture feedback (legacy method for push-ups)
      */
     fun analyzePose(pose: Pose, currentState: PushUpState): PostureAnalysisResult {
+        val exerciseState = when (currentState) {
+            PushUpState.UP_POSITION -> ExerciseState.START_POSITION
+            PushUpState.DOWN_POSITION -> ExerciseState.END_POSITION
+            PushUpState.UNKNOWN -> ExerciseState.UNKNOWN
+        }
+        return analyzePose(pose, exerciseState, ExerciseType.PUSH_UP)
+    }
+    
+    /**
+     * Analyze pose and return posture feedback for any exercise type
+     */
+    fun analyzePose(pose: Pose, currentState: ExerciseState, exerciseType: ExerciseType): PostureAnalysisResult {
         val timestamp = System.currentTimeMillis()
         
         // Calculate form quality score (0-100)
-        val formQuality = calculateFormQuality(pose)
+        val formQuality = calculateFormQuality(pose, exerciseType, currentState)
         
         // Update form quality history
         updateFormQualityHistory(formQuality)
         
         // Determine if feedback should be given
         val feedback = if (timestamp - lastFeedbackTime > feedbackCooldownMs) {
-            analyzeFormIssues(pose, currentState)?.also {
+            analyzeFormIssues(pose, currentState, exerciseType)?.also {
                 lastFeedbackTime = timestamp
             }
         } else null
@@ -46,9 +60,27 @@ class PostureAnalyzer {
     }
     
     /**
-     * Calculate overall form quality score (0-100)
+     * Calculate overall form quality score (0-100) for specific exercise
+     */
+    private fun calculateFormQuality(pose: Pose, exerciseType: ExerciseType, currentState: ExerciseState): Float {
+        return when (exerciseType) {
+            ExerciseType.PUSH_UP -> calculatePushUpFormQuality(pose)
+            ExerciseType.PULL_UP -> calculatePullUpFormQuality(pose, currentState)
+            ExerciseType.SQUAT -> calculateSquatFormQuality(pose, currentState)
+        }
+    }
+    
+    /**
+     * Calculate overall form quality score (0-100) for push-ups (legacy method)
      */
     private fun calculateFormQuality(pose: Pose): Float {
+        return calculatePushUpFormQuality(pose)
+    }
+    
+    /**
+     * Calculate form quality for push-ups
+     */
+    private fun calculatePushUpFormQuality(pose: Pose): Float {
         var score = 100f
         var factors = 0
         
@@ -91,9 +123,145 @@ class PostureAnalyzer {
     }
     
     /**
-     * Analyze for specific form issues that need feedback
+     * Calculate form quality for pull-ups
+     */
+    private fun calculatePullUpFormQuality(pose: Pose, currentState: ExerciseState): Float {
+        var score = 80f // Base score
+        var factors = 0
+        
+        // Check arm symmetry
+        val leftArmAngle = calculateArmAngle(
+            pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER),
+            pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW),
+            pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
+        )
+        
+        val rightArmAngle = calculateArmAngle(
+            pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER),
+            pose.getPoseLandmark(PoseLandmark.RIGHT_ELBOW),
+            pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
+        )
+        
+        if (leftArmAngle != null && rightArmAngle != null) {
+            val angleDifference = abs(leftArmAngle - rightArmAngle)
+            if (angleDifference > 25) {
+                score -= (angleDifference - 25) * 1.5f // Penalize asymmetry
+            }
+            factors++
+        }
+        
+        // Check if user is pulling up adequately
+        if (currentState == ExerciseState.END_POSITION) {
+            if (leftArmAngle != null && leftArmAngle > 120) {
+                score -= 15f // Not pulling up enough
+            }
+        }
+        
+        return if (factors > 0) score.coerceIn(0f, 100f) else 70f
+    }
+    
+    /**
+     * Calculate form quality for squats
+     */
+    private fun calculateSquatFormQuality(pose: Pose, currentState: ExerciseState): Float {
+        var score = 85f // Base score
+        var factors = 0
+        
+        // Check leg symmetry
+        val leftHipKneeAngle = calculateHipKneeAngle(pose, true)
+        val rightHipKneeAngle = calculateHipKneeAngle(pose, false)
+        
+        if (leftHipKneeAngle != null && rightHipKneeAngle != null) {
+            val angleDifference = abs(leftHipKneeAngle - rightHipKneeAngle)
+            if (angleDifference > 15) {
+                score -= (angleDifference - 15) * 2f // Penalize asymmetry
+            }
+            factors++
+        }
+        
+        // Check squat depth when in squat position
+        if (currentState == ExerciseState.END_POSITION) {
+            val avgAngle = when {
+                leftHipKneeAngle != null && rightHipKneeAngle != null -> (leftHipKneeAngle + rightHipKneeAngle) / 2
+                leftHipKneeAngle != null -> leftHipKneeAngle
+                rightHipKneeAngle != null -> rightHipKneeAngle
+                else -> null
+            }
+            
+            avgAngle?.let { angle ->
+                if (angle > 130) { // Not deep enough
+                    score -= (angle - 130) * 0.5f
+                }
+                factors++
+            }
+        }
+        
+        return if (factors > 0) score.coerceIn(0f, 100f) else 75f
+    }
+    
+    private fun calculateHipKneeAngle(pose: Pose, isLeftLeg: Boolean): Float? {
+        val hipLandmark = if (isLeftLeg) PoseLandmark.LEFT_HIP else PoseLandmark.RIGHT_HIP
+        val kneeLandmark = if (isLeftLeg) PoseLandmark.LEFT_KNEE else PoseLandmark.RIGHT_KNEE
+        val ankleLandmark = if (isLeftLeg) PoseLandmark.LEFT_ANKLE else PoseLandmark.RIGHT_ANKLE
+        
+        val hip = pose.getPoseLandmark(hipLandmark)
+        val knee = pose.getPoseLandmark(kneeLandmark)
+        val ankle = pose.getPoseLandmark(ankleLandmark)
+        
+        if (hip == null || knee == null || ankle == null) return null
+        
+        if (hip.inFrameLikelihood < 0.5f || knee.inFrameLikelihood < 0.5f || ankle.inFrameLikelihood < 0.5f) {
+            return null
+        }
+        
+        // Vector from knee to hip
+        val v1x = hip.position.x - knee.position.x
+        val v1y = hip.position.y - knee.position.y
+        
+        // Vector from knee to ankle
+        val v2x = ankle.position.x - knee.position.x
+        val v2y = ankle.position.y - knee.position.y
+        
+        // Calculate angle using dot product
+        val dotProduct = v1x * v2x + v1y * v2y
+        val magnitude1 = sqrt(v1x * v1x + v1y * v1y)
+        val magnitude2 = sqrt(v2x * v2x + v2y * v2y)
+        
+        if (magnitude1 == 0f || magnitude2 == 0f) return null
+        
+        val cosAngle = dotProduct / (magnitude1 * magnitude2)
+        val clampedCosAngle = cosAngle.coerceIn(-1f, 1f)
+        
+        return Math.toDegrees(acos(clampedCosAngle.toDouble())).toFloat()
+    }
+    
+    /**
+     * Analyze for specific form issues that need feedback (legacy method for push-ups)
      */
     private fun analyzeFormIssues(pose: Pose, currentState: PushUpState): PostureFeedback? {
+        val exerciseState = when (currentState) {
+            PushUpState.UP_POSITION -> ExerciseState.START_POSITION
+            PushUpState.DOWN_POSITION -> ExerciseState.END_POSITION
+            PushUpState.UNKNOWN -> ExerciseState.UNKNOWN
+        }
+        return analyzeFormIssues(pose, exerciseState, ExerciseType.PUSH_UP)
+    }
+    
+    /**
+     * Analyze for specific form issues that need feedback for any exercise
+     */
+    private fun analyzeFormIssues(pose: Pose, currentState: ExerciseState, exerciseType: ExerciseType): PostureFeedback? {
+        return when (exerciseType) {
+            ExerciseType.PUSH_UP -> analyzePushUpFormIssues(pose, currentState)
+            ExerciseType.PULL_UP -> analyzePullUpFormIssues(pose, currentState)
+            ExerciseType.SQUAT -> analyzeSquatFormIssues(pose, currentState)
+        }
+    }
+    
+    /**
+     * Analyze form issues specific to push-ups
+     */
+    private fun analyzePushUpFormIssues(pose: Pose, currentState: ExerciseState): PostureFeedback? {
         // Check arm angles for incomplete range of motion
         val leftArmAngle = calculateArmAngle(
             pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER),
@@ -116,12 +284,12 @@ class PostureAnalyzer {
         
         avgArmAngle?.let { angle ->
             when (currentState) {
-                PushUpState.DOWN_POSITION -> {
+                ExerciseState.END_POSITION -> { // Down position
                     if (angle > 110) { // Not low enough
                         return PostureFeedback.LOWER_BODY
                     }
                 }
-                PushUpState.UP_POSITION -> {
+                ExerciseState.START_POSITION -> { // Up position
                     if (angle < 140) { // Not high enough
                         return PostureFeedback.RAISE_BODY
                     }
@@ -145,8 +313,84 @@ class PostureAnalyzer {
         }
         
         // Give positive feedback for good form
-        val formQuality = calculateFormQuality(pose)
+        val formQuality = calculatePushUpFormQuality(pose)
         if (formQuality >= 85) {
+            return PostureFeedback.GOOD_FORM
+        }
+        
+        return null
+    }
+    
+    /**
+     * Analyze form issues specific to pull-ups
+     */
+    private fun analyzePullUpFormIssues(pose: Pose, currentState: ExerciseState): PostureFeedback? {
+        // For pull-ups, focus on arm symmetry and pulling height
+        val leftArmAngle = calculateArmAngle(
+            pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER),
+            pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW),
+            pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
+        )
+        
+        val rightArmAngle = calculateArmAngle(
+            pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER),
+            pose.getPoseLandmark(PoseLandmark.RIGHT_ELBOW),
+            pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
+        )
+        
+        // Check arm symmetry
+        if (leftArmAngle != null && rightArmAngle != null) {
+            val angleDifference = abs(leftArmAngle - rightArmAngle)
+            if (angleDifference > 25) {
+                return PostureFeedback.ALIGN_HANDS // Reuse for arm symmetry
+            }
+        }
+        
+        // Check if pulling up enough when in top position
+        if (currentState == ExerciseState.END_POSITION) {
+            val avgAngle = when {
+                leftArmAngle != null && rightArmAngle != null -> (leftArmAngle + rightArmAngle) / 2
+                leftArmAngle != null -> leftArmAngle
+                rightArmAngle != null -> rightArmAngle
+                else -> null
+            }
+            
+            if (avgAngle != null && avgAngle > 120) {
+                return PostureFeedback.RAISE_BODY // Pull up higher
+            }
+        }
+        
+        return PostureFeedback.GOOD_FORM
+    }
+    
+    /**
+     * Analyze form issues specific to squats
+     */
+    private fun analyzeSquatFormIssues(pose: Pose, currentState: ExerciseState): PostureFeedback? {
+        val leftHipKneeAngle = calculateHipKneeAngle(pose, true)
+        val rightHipKneeAngle = calculateHipKneeAngle(pose, false)
+        
+        // Check leg symmetry
+        if (leftHipKneeAngle != null && rightHipKneeAngle != null) {
+            val angleDifference = abs(leftHipKneeAngle - rightHipKneeAngle)
+            if (angleDifference > 20) {
+                return PostureFeedback.ALIGN_HANDS // Reuse for leg symmetry
+            }
+        }
+        
+        // Check squat depth when in squat position
+        if (currentState == ExerciseState.END_POSITION) {
+            val avgAngle = when {
+                leftHipKneeAngle != null && rightHipKneeAngle != null -> (leftHipKneeAngle + rightHipKneeAngle) / 2
+                leftHipKneeAngle != null -> leftHipKneeAngle
+                rightHipKneeAngle != null -> rightHipKneeAngle
+                else -> null
+            }
+            
+            if (avgAngle != null && avgAngle > 130) {
+                return PostureFeedback.LOWER_BODY // Squat deeper
+            }
+            
             return PostureFeedback.GOOD_FORM
         }
         
