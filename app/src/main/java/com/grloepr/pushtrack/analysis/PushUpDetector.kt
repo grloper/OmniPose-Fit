@@ -96,32 +96,71 @@ class PushUpDetector : ExerciseDetector {
      * @return DetectionResult with count, state, and analysis
      */
     override fun processPose(pose: Pose): DetectionResult {
-        val result = processPoseWithAnalysis(pose)
+        android.util.Log.d("PushUpDetector", "Processing pose...")
         
-        // Convert PushUpState to ExerciseState
-        val exerciseState = when (result.currentState) {
-            PushUpState.UP_POSITION -> ExerciseState.START_POSITION
-            PushUpState.DOWN_POSITION -> ExerciseState.END_POSITION
-            PushUpState.UNKNOWN -> ExerciseState.UNKNOWN
-        }
-        
-        // Convert PostureAnalysisResult to FormQuality
-        val formQuality = result.postureAnalysis?.let {
-            FormQuality(
-                score = it.formQuality, // Changed from overallScore to formQuality
-                hasGoodForm = it.hasGoodForm,
-                feedback = it.feedback?.toString() // Convert PostureFeedback to String
+        try {
+            // Simple detection without PostureAnalysis first to isolate issues
+            val armAngle = calculateArmAngle(pose)
+            android.util.Log.d("PushUpDetector", "Calculated arm angle: $armAngle")
+            
+            var newRepCount = repCount
+            
+            if (armAngle != null) {
+                val newState = when {
+                    armAngle < downThreshold -> PushUpState.DOWN_POSITION
+                    armAngle > upThreshold -> PushUpState.UP_POSITION
+                    else -> currentState // Maintain current state in transition
+                }
+                
+                android.util.Log.d("PushUpDetector", "State transition: $currentState -> $newState")
+                
+                // Count a rep when transitioning from DOWN to UP
+                if (currentState == PushUpState.DOWN_POSITION && newState == PushUpState.UP_POSITION) {
+                    newRepCount++
+                    repCount = newRepCount
+                    android.util.Log.d("PushUpDetector", "Rep counted! New count: $newRepCount")
+                }
+                
+                currentState = newState
+            }
+            
+            // Convert PushUpState to ExerciseState
+            val exerciseState = when (currentState) {
+                PushUpState.UP_POSITION -> ExerciseState.START_POSITION
+                PushUpState.DOWN_POSITION -> ExerciseState.END_POSITION
+                PushUpState.UNKNOWN -> ExerciseState.UNKNOWN
+            }
+            
+            // Temporarily disable PostureAnalysis to isolate detection issues
+            val formQuality = FormQuality(
+                score = 75f, // Default score
+                hasGoodForm = true,
+                feedback = null
+            )
+            
+            val result = DetectionResult(
+                repCount = newRepCount,
+                currentState = exerciseState,
+                formQuality = formQuality,
+                confidence = if (armAngle != null) 1.0f else 0.0f,
+                lastAngle = armAngle?.toFloat(),
+                detectionMethod = "angle-based"
+            )
+            
+            android.util.Log.d("PushUpDetector", "Detection result: reps=$newRepCount, state=$exerciseState, angle=$armAngle")
+            return result
+            
+        } catch (e: Exception) {
+            android.util.Log.e("PushUpDetector", "Error in processPose: ${e.message}", e)
+            return DetectionResult(
+                repCount = repCount,
+                currentState = ExerciseState.UNKNOWN,
+                formQuality = null,
+                confidence = 0.0f,
+                lastAngle = null,
+                detectionMethod = "error"
             )
         }
-        
-        return DetectionResult(
-            repCount = result.repCount,
-            currentState = exerciseState,
-            formQuality = formQuality,
-            confidence = 1.0f,
-            lastAngle = calculateArmAngle(pose)?.toFloat(), // Convert Double? to Float?
-            detectionMethod = "angle-based"
-        )
     }
     
     /**

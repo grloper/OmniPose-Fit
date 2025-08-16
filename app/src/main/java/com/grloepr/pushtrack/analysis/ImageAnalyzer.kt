@@ -67,6 +67,7 @@ class ImageAnalyzer(
             poseDetectorClient.detectPose(
                 image = inputImage,
                 onSuccess = { pose ->
+                    android.util.Log.d("ImageAnalyzer", "Pose detected successfully with ${pose.allPoseLandmarks.size} landmarks")
                     // Emit pose results with image dimensions to collectors on background thread
                     analysisScope.launch {
                         _poseResults.tryEmit(PoseDetectionResult(pose, imageWidth, imageHeight))
@@ -77,7 +78,7 @@ class ImageAnalyzer(
                 onFailure = { exception ->
                     // Log error but continue processing
                     analysisScope.launch {
-                        println("Pose detection failed: ${exception.message}")
+                        android.util.Log.e("ImageAnalyzer", "Pose detection failed: ${exception.message}", exception)
                         isProcessing = false
                         imageProxy.close()
                     }

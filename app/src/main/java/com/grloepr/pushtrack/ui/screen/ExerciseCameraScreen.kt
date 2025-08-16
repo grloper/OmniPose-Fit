@@ -86,7 +86,11 @@ fun ExerciseCameraScreen(
     // Camera and pose detection
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProvider = rememberCameraProvider()
-    val poseDetectorClient = remember { PoseDetectorClient() }
+    val poseDetectorClient = remember { 
+        PoseDetectorClient().apply { 
+            initialize() 
+        }
+    }
     val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_FRONT_CAMERA) }
     
@@ -126,6 +130,7 @@ fun ExerciseCameraScreen(
     // Collect pose results and process exercise detection
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collect { poseResult ->
+            android.util.Log.d("ExerciseCameraScreen", "Received pose result: landmarks=${poseResult.pose.allPoseLandmarks.size}")
             currentPoseResult = poseResult
             
             // Skip processing if detection is disabled
@@ -148,9 +153,10 @@ fun ExerciseCameraScreen(
             }
             
             // Process pose for exercise detection
+            android.util.Log.d("ExerciseCameraScreen", "About to process pose with detector: ${currentDetector::class.simpleName}")
             val newResult = currentDetector.processPose(poseResult.pose)
             android.util.Log.d("ExerciseCameraScreen", "Processed pose: state=${newResult.currentState}, " +
-                    "count=${newResult.repCount}, angle=${newResult.lastAngle}, method=${newResult.detectionMethod}")
+                    "count=${newResult.repCount}, angle=${newResult.lastAngle}, method=${newResult.detectionMethod}, confidence=${newResult.confidence}")
             
             // Announce new rep count
             if (newResult.repCount > detectionResult.repCount) {
