@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -22,6 +23,7 @@ import com.google.mlkit.vision.pose.Pose
 import com.grloepr.pushtrack.analysis.*
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
+import com.grloepr.pushtrack.domain.*
 import com.grloepr.pushtrack.feedback.*
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
 import com.grloepr.pushtrack.permission.CameraPermissionRequest
@@ -45,7 +47,7 @@ fun PushUpCameraScreen() {
             CameraPermissionDeniedContent()
         }
         permissionGranted -> {
-            CameraPreviewScreen()
+            MultiExerciseCameraScreen()
         }
         else -> {
             CameraPermissionRequest(
@@ -57,7 +59,93 @@ fun PushUpCameraScreen() {
 }
 
 @Composable
-private fun CameraPreviewScreen() {
+private fun MultiExerciseCameraScreen() {
+    // Exercise selection state
+    var selectedExerciseType by remember { mutableStateOf(ExerciseType.PUSH_UP) }
+    var showExerciseSelection by remember { mutableStateOf(false) }
+    
+    // Delegate to appropriate screen based on selected exercise
+    when (selectedExerciseType) {
+        ExerciseType.PUSH_UP -> {
+            PushUpDetectionScreen(
+                onExerciseSelectionRequested = { showExerciseSelection = true }
+            )
+        }
+        ExerciseType.PULL_UP, ExerciseType.SQUAT -> {
+            // Use the new multi-exercise detection system for these
+            ExerciseCameraScreenContent(
+                initialExerciseType = selectedExerciseType,
+                onExerciseSelectionRequested = { showExerciseSelection = true }
+            )
+        }
+    }
+    
+    // Exercise selection dialog
+    if (showExerciseSelection) {
+        ExerciseSelectionDialog(
+            currentExercise = selectedExerciseType,
+            onExerciseSelected = { exerciseType ->
+                selectedExerciseType = exerciseType
+                showExerciseSelection = false
+            },
+            onDismiss = { showExerciseSelection = false }
+        )
+    }
+}
+
+@Composable 
+private fun PushUpDetectionScreen(
+    onExerciseSelectionRequested: () -> Unit
+) {
+    // This is the original working detection logic
+    CameraPreviewScreen(onExerciseSelectionRequested)
+}
+
+@Composable
+private fun ExerciseCameraScreenContent(
+    initialExerciseType: ExerciseType,
+    onExerciseSelectionRequested: () -> Unit
+) {
+    // For now, show a simple message for non-push-up exercises
+    // This can be expanded later with full multi-exercise detection
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "${initialExerciseType.displayName} Detection",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            
+            Text(
+                text = "Multi-exercise detection coming soon!\nFor now, use Push-ups for full functionality.",
+                fontSize = 16.sp,
+                color = Color.Gray,
+                textAlign = TextAlign.Center
+            )
+            
+            Button(
+                onClick = onExerciseSelectionRequested,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4ECCA3)
+                )
+            ) {
+                Text("Select Different Exercise")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraPreviewScreen(
+    onExerciseSelectionRequested: () -> Unit = {}
+) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
     val cameraProvider = rememberCameraProvider()
@@ -261,19 +349,37 @@ private fun CameraPreviewScreen() {
             )
         }
         
-        // Debug button
-        FloatingActionButton(
-            onClick = { settingsManager.setShowDebugInfo(!showDebugInfo) },
-            modifier = Modifier.align(Alignment.TopStart).padding(16.dp),
-            containerColor = if (showDebugInfo) Color(0xFF4ECCA3) else Color(0xFF424255),
-            shape = RoundedCornerShape(16.dp)
+        // Debug button and exercise selection
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = if (showDebugInfo) "HIDE" else "DEBUG", 
-                color = Color.White,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
+            FloatingActionButton(
+                onClick = { settingsManager.setShowDebugInfo(!showDebugInfo) },
+                containerColor = if (showDebugInfo) Color(0xFF4ECCA3) else Color(0xFF424255),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = if (showDebugInfo) "HIDE" else "DEBUG", 
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            FloatingActionButton(
+                onClick = onExerciseSelectionRequested,
+                containerColor = Color(0xFF4ECCA3),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FitnessCenter,
+                    contentDescription = "Select Exercise",
+                    tint = Color.White
+                )
+            }
         }
         
         // Camera controls and settings
