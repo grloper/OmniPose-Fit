@@ -57,6 +57,7 @@ fun ExerciseCameraScreen(
     var selectedExerciseType by remember { mutableStateOf(initialExerciseType) }
     var currentDetector by remember { mutableStateOf(ExerciseDetectorFactory.createDetector(selectedExerciseType)) }
     var showExerciseSelection by remember { mutableStateOf(false) }
+    var detectionEnabled by remember { mutableStateOf(true) }
     
     // Detection state
     var currentPoseResult by remember { mutableStateOf<PoseDetectionResult?>(null) }
@@ -72,44 +73,46 @@ fun ExerciseCameraScreen(
     var currentFeedbackMessage by remember { mutableStateOf<String?>(null) }
     
     // Settings
-    val settingsManager = remember { SettingsManager(LocalContext.current) }
+    val context = LocalContext.current
+    val settingsManager = remember { SettingsManager(context) }
     val voiceEnabled by settingsManager.voiceEnabled.collectAsState()
     val speechRate by settingsManager.speechRate.collectAsState()
     val overlayMode by settingsManager.overlayMode.collectAsState()
     val showSettings by settingsManager.showSettings.collectAsState()
     
     // Voice feedback
-    val voiceFeedbackManager = remember { VoiceFeedbackManager(LocalContext.current) }
+    val voiceFeedbackManager = remember { VoiceFeedbackManager(context) }
     
     // Camera and pose detection
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProvider = rememberCameraProvider()
     val poseDetectorClient = remember { PoseDetectorClient() }
     val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
+    var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_FRONT_CAMERA) }
+    
+    // Debug state
+    var debugModeActive by remember { mutableStateOf(false) }
     
     // Handle exercise type changes
     LaunchedEffect(selectedExerciseType) {
+        // Force complete any ongoing calibration
+        calibrationManager.forceCompleteCalibration()
+        calibrationManager.reset()
+        
+        // Create new detector
         val newDetector = ExerciseDetectorFactory.createDetector(selectedExerciseType)
         currentDetector = newDetector
+        
+        // Reset detection state
+        detectionResult = DetectionResult(0, ExerciseState.UNKNOWN, null)
         
         // Start calibration if needed
         if (calibrationManager.isCalibrationNeeded(newDetector)) {
             calibrationManager.startCalibration(newDetector)
         }
-    }
-    
-    // Bind camera
-    LaunchedEffect(cameraProvider, imageAnalyzer) {
-        if (cameraProvider != null) {
-            bindCameraWithAnalysis(
-                context,
-                lifecycleOwner,
-                cameraProvider,
-                imageAnalyzer,
-                CameraSelector.DEFAULT_FRONT_CAMERA
-            )
-        }
+        
+        // Re-enable detection
+        detectionEnabled = true
     }
     
     // Update voice feedback settings
@@ -125,28 +128,39 @@ fun ExerciseCameraScreen(
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
             
+            // Skip processing if detection is disabled
+            if (!detectionEnabled) {
+                android.util.Log.d("ExerciseCameraScreen", "Detection disabled")
+                return@collect
+            }
+            
             // Handle calibration if in progress
             if (calibrationState.isCalibrating) {
+                android.util.Log.d("ExerciseCameraScreen", "Calibrating: ${calibrationState.countdown}")
                 calibrationManager.processPose(poseResult.pose)
                 return@collect
             }
             
             // Skip detection if calibration is needed but not complete
             if (currentDetector.requiresCalibration() && !currentDetector.isCalibrated()) {
+                android.util.Log.d("ExerciseCameraScreen", "Calibration needed but not complete")
                 return@collect
             }
             
             // Process pose for exercise detection
             val newResult = currentDetector.processPose(poseResult.pose)
+            android.util.Log.d("ExerciseCameraScreen", "Processed pose: state=${newResult.currentState}, " +
+                    "count=${newResult.repCount}, angle=${newResult.lastAngle}, method=${newResult.detectionMethod}")
             
             // Announce new rep count
             if (newResult.repCount > detectionResult.repCount) {
                 voiceFeedbackManager.announceRepCount(newResult.repCount)
+                android.util.Log.d("ExerciseCameraScreen", "New rep counted: ${newResult.repCount}")
             }
             
             // Handle form feedback
             newResult.formQuality?.feedback?.let { feedback ->
-                voiceFeedbackManager.announcePostureFeedback(PostureFeedback.GOOD_FORM) // Simplified
+                voiceFeedbackManager.announcePostureFeedback(PostureFeedback.GOOD_FORM)
                 currentFeedbackMessage = feedback
             }
             
@@ -172,15 +186,12 @@ fun ExerciseCameraScreen(
     
     // Show workout summary if requested
     if (showSummary) {
-        val workoutDuration = System.currentTimeMillis() - workoutStartTime
-        val goodFormReps = (detectionResult.repCount * (detectionResult.formQuality?.score ?: 75f) / 100).toInt()
-        
         WorkoutSummaryScreen(
             summary = WorkoutSummary(
                 totalReps = detectionResult.repCount,
                 averageFormQuality = detectionResult.formQuality?.score ?: 0f,
-                duration = workoutDuration,
-                goodFormReps = goodFormReps,
+                duration = System.currentTimeMillis() - workoutStartTime,
+                goodFormReps = (detectionResult.repCount * (detectionResult.formQuality?.score ?: 75f) / 100).toInt(),
                 exerciseType = selectedExerciseType
             ),
             onStartNewWorkout = {
@@ -207,6 +218,7 @@ fun ExerciseCameraScreen(
         ExerciseSelectionDialog(
             currentExercise = selectedExerciseType,
             onExerciseSelected = { exerciseType ->
+                // Always allow changing exercises
                 selectedExerciseType = exerciseType
                 showExerciseSelection = false
             },
@@ -225,35 +237,55 @@ fun ExerciseCameraScreen(
             modifier = Modifier.fillMaxSize(),
             update = { previewView ->
                 cameraProvider?.let { provider ->
-                    val preview = androidx.camera.core.Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
+                    // Properly bind camera in the update function
+                    bindCameraWithAnalysis(
+                        cameraProvider = provider,
+                        previewView = previewView,
+                        lifecycleOwner = lifecycleOwner,
+                        imageAnalyzer = imageAnalyzer,
+                        cameraSelector = cameraSelector
+                    )
                 }
             }
         )
         
         // Pose overlay
         currentPoseResult?.let { poseResult ->
-            when (overlayMode) {
-                "enhanced" -> {
-                    EnhancedPoseOverlay(
-                        poseResult = poseResult.toPoseFrameResult(),
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                "simple" -> {
-                    PoseOverlay(
-                        poseResult = poseResult.toPoseFrameResult(),
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+            val poseFrameResult = poseResult.toPoseFrameResult(
+                isFrontCamera = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
+            )
+            
+            // Always show the pose overlay in debug mode
+            if (debugModeActive) {
+                EnhancedPoseOverlay(
+                    poseFrameResult = poseFrameResult,
+                    modifier = Modifier.fillMaxSize(),
+                    debugMode = true
+                )
+            } else if (overlayMode == "enhanced") {
+                EnhancedPoseOverlay(
+                    poseFrameResult = poseFrameResult,
+                    modifier = Modifier.fillMaxSize(),
+                    debugMode = false
+                )
+            } else if (overlayMode == "simple") {
+                PoseOverlay(
+                    pose = poseResult.pose,
+                    imageWidth = poseResult.imageWidth,
+                    imageHeight = poseResult.imageHeight,
+                    isFrontCamera = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
         
         // Calibration overlay
-        if (calibrationState.isCalibrating) {
+        if (calibrationState.isCalibrating || (calibrationState.isComplete && !calibrationState.isSuccessful)) {
             CalibrationOverlay(
                 state = calibrationState,
+                onSkipCalibration = {
+                    calibrationManager.forceCompleteCalibration()
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }
@@ -352,19 +384,109 @@ fun ExerciseCameraScreen(
                 modifier = Modifier.fillMaxSize()
             )
         }
+        
+        // Debug button - move it to a different position to avoid overlap with the counter
+        FloatingActionButton(
+            onClick = { 
+                // Toggle debug mode
+                debugModeActive = !debugModeActive
+                // Also update settings but don't rely on it for UI state
+                settingsManager.setShowDebugInfo(debugModeActive)
+            },
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 16.dp, start = 16.dp),
+            containerColor = if (debugModeActive) 
+                Color(0xFF4ECCA3) else Color(0xFF424255),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(
+                text = if (debugModeActive) "HIDE" else "DEBUG", 
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        
+        // Add a state indicator to show if detection is working
+        if (debugModeActive) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 100.dp)
+                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "DETECTION DEBUG INFO",
+                    color = Color(0xFF4ECCA3),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Divider(color = Color.Gray.copy(alpha = 0.5f))
+                
+                Text(
+                    text = "Exercise: ${selectedExerciseType.displayName}",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+                
+                Text(
+                    text = "State: ${detectionResult.currentState}",
+                    color = when(detectionResult.currentState) {
+                        ExerciseState.START_POSITION -> Color(0xFF4ECCA3)
+                        ExerciseState.END_POSITION -> Color(0xFFFC5185)
+                        else -> Color.White
+                    },
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                
+                Text(
+                    text = "Reps: ${detectionResult.repCount}",
+                    color = Color(0xFFFFD700),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Text(
+                    text = "Angle: ${detectionResult.lastAngle?.toInt() ?: "N/A"}°",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+                
+                Text(
+                    text = "Confidence: ${(detectionResult.confidence * 100).toInt()}%",
+                    color = if (detectionResult.confidence > 0.5f) Color(0xFF4ECCA3) else Color.Gray,
+                    fontSize = 14.sp
+                )
+                
+                Text(
+                    text = "Method: ${detectionResult.detectionMethod}",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+                
+                if (calibrationState.isCalibrating) {
+                    Text(
+                        text = "CALIBRATING: ${calibrationState.countdown}",
+                        color = Color(0xFFFFD700),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                if (currentPoseResult == null) {
+                    Text(
+                        text = "NO POSE DETECTED",
+                        color = Color(0xFFFF5252),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
-}
-
-// Extension function to convert PoseDetectionResult to PoseFrameResult
-fun PoseDetectionResult.toPoseFrameResult(
-    rotationDegrees: Int = 0,
-    isFrontCamera: Boolean = false
-): PoseFrameResult {
-    return PoseFrameResult(
-        pose = this.pose,
-        imageWidth = this.imageWidth,
-        imageHeight = this.imageHeight,
-        rotationDegrees = rotationDegrees,
-        isFrontCamera = isFrontCamera
-    )
 }

@@ -10,18 +10,6 @@ data class FormQuality(
 )
 
 /**
- * Result of exercise detection for a single frame
- */
-data class DetectionResult(
-    val repCount: Int,
-    val currentState: ExerciseState,
-    val formQuality: FormQuality?,
-    val confidence: Float = 0f,
-    val lastAngle: Float? = null,
-    val detectionMethod: String? = null
-)
-
-/**
  * Generic exercise states
  */
 enum class ExerciseState {

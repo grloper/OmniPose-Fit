@@ -185,16 +185,3 @@ class VoiceFeedbackManager(private val context: Context) {
         _isInitialized.value = false
     }
 }
-
-/**
- * Types of posture feedback
- */
-enum class PostureFeedback {
-    GOOD_FORM,
-    LOWER_BODY,
-    RAISE_BODY,
-    STRAIGHTEN_BACK,
-    ALIGN_HANDS,
-    SLOW_DOWN,
-    KEEP_GOING
-}

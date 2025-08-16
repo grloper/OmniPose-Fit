@@ -31,8 +31,16 @@ class CalibrationManager {
      * Start calibration for the given detector
      */
     fun startCalibration(detector: ExerciseDetector) {
+        // Always reset first to clear any previous calibration state
+        reset()
+        
         if (!detector.requiresCalibration()) {
-            _calibrationState.value = CalibrationState(isComplete = true, isSuccessful = true)
+            // Just set completed state without calibration for exercises that don't need it
+            _calibrationState.value = CalibrationState(
+                isCalibrating = false,
+                isComplete = true, 
+                isSuccessful = true
+            )
             return
         }
         
@@ -48,7 +56,9 @@ class CalibrationManager {
         _calibrationState.value = CalibrationState(
             isCalibrating = true,
             countdown = calibrationCountdown,
-            instruction = instruction
+            instruction = instruction,
+            isComplete = false,
+            isSuccessful = false
         )
     }
     
@@ -58,7 +68,7 @@ class CalibrationManager {
      */
     fun processPose(pose: Pose) {
         val currentState = _calibrationState.value
-        if (!currentState.isCalibrating || currentDetector == null) return
+        if (!currentState.isCalibrating || currentState.isComplete || currentDetector == null) return
         
         // Decrement countdown
         if (calibrationCountdown > 0) {
@@ -69,6 +79,7 @@ class CalibrationManager {
                 // Attempt calibration
                 val success = currentDetector!!.calibrate(pose)
                 _calibrationState.value = CalibrationState(
+                    isCalibrating = false,
                     isComplete = true,
                     isSuccessful = success,
                     instruction = if (success) "Calibration successful!" else "Calibration failed. Try again."
@@ -81,11 +92,31 @@ class CalibrationManager {
      * Reset calibration state
      */
     fun reset() {
-        _calibrationState.value = CalibrationState()
+        _calibrationState.value = CalibrationState(
+            isCalibrating = false,
+            isComplete = false,
+            isSuccessful = false,
+            countdown = 0,
+            instruction = ""
+        )
         calibrationCountdown = 0
         currentDetector = null
     }
     
+    /**
+     * Force complete any ongoing calibration
+     * Use when user wants to switch exercises without completing calibration
+     */
+    fun forceCompleteCalibration() {
+        _calibrationState.value = CalibrationState(
+            isCalibrating = false,
+            isComplete = true,
+            isSuccessful = true,
+            instruction = "Calibration skipped"
+        )
+        calibrationCountdown = 0
+    }
+
     /**
      * Check if calibration is needed for the detector
      */

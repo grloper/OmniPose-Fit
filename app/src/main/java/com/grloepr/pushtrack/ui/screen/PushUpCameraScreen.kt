@@ -34,20 +34,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.delay
 
-// Extension function to convert PoseDetectionResult to PoseFrameResult
-fun PoseDetectionResult.toPoseFrameResult(
-    rotationDegrees: Int = 0,
-    isFrontCamera: Boolean = false
-): PoseFrameResult {
-    return PoseFrameResult(
-        pose = this.pose,
-        imageWidth = this.imageWidth,
-        imageHeight = this.imageHeight,
-        rotationDegrees = rotationDegrees,
-        isFrontCamera = isFrontCamera
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PushUpCameraScreen() {
@@ -216,7 +202,6 @@ private fun CameraPreviewScreen() {
         if (showDebugInfo) {
             currentPoseResult?.let { poseResult ->
                 val poseFrameResult = poseResult.toPoseFrameResult(
-                    rotationDegrees = 0,
                     isFrontCamera = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
                 )
                 

@@ -215,8 +215,8 @@ private fun transformCoordinateEnhanced(
     canvasHeight: Float
 ): Offset {
     val (x, y) = landmark.position.x to landmark.position.y
-    val imageWidth = poseFrameResult.imageWidth.toFloat()
-    val imageHeight = poseFrameResult.imageHeight.toFloat()
+    val imageWidth = poseFrameResult.width.toFloat()
+    val imageHeight = poseFrameResult.height.toFloat()
     
     // Apply rotation transformation based on image rotation
     val (rotatedX, rotatedY, rotatedWidth, rotatedHeight) = when (poseFrameResult.rotationDegrees) {

@@ -8,8 +8,8 @@ import com.google.mlkit.vision.pose.Pose
  */
 data class PoseFrameResult(
     val pose: Pose,
-    val imageWidth: Int,
-    val imageHeight: Int,
-    val rotationDegrees: Int,
+    val width: Int,
+    val height: Int,
+    val rotationDegrees: Int = 0,
     val isFrontCamera: Boolean
 )

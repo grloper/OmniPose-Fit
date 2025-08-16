@@ -7,14 +7,11 @@ package com.grloepr.pushtrack.analysis
 /**
  * Convert a PoseDetectionResult to a PoseFrameResult for use with EnhancedPoseOverlay
  */
-fun PoseDetectionResult.toPoseFrameResult(
-    rotationDegrees: Int = 0,
-    isFrontCamera: Boolean = false
-): PoseFrameResult {
+fun PoseDetectionResult.toPoseFrameResult(isFrontCamera: Boolean = false, rotationDegrees: Int = 0): PoseFrameResult {
     return PoseFrameResult(
         pose = this.pose,
-        imageWidth = this.imageWidth,
-        imageHeight = this.imageHeight,
+        width = this.imageWidth,
+        height = this.imageHeight,
         rotationDegrees = rotationDegrees,
         isFrontCamera = isFrontCamera
     )
