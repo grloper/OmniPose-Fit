@@ -7,7 +7,7 @@ import com.grloepr.pushtrack.feedback.PostureAnalysisResult
 import kotlin.math.*
 
 /**
- * Push-up detection states
+ * Push-up detection states (maintained for backward compatibility)
  */
 enum class PushUpState {
     UNKNOWN,
@@ -16,7 +16,7 @@ enum class PushUpState {
 }
 
 /**
- * Enhanced push-up detection with form analysis
+ * Enhanced push-up detection with form analysis (maintained for backward compatibility)
  */
 data class PushUpResult(
     val repCount: Int,
@@ -26,68 +26,45 @@ data class PushUpResult(
 
 /**
  * Detects push-up movements from pose data
+ * Now extends ExerciseDetector for consistency with other exercise types
  */
-class PushUpDetector {
+class PushUpDetector : ExerciseDetector(ExerciseType.PUSH_UP) {
     
-    private var currentState = PushUpState.UNKNOWN
-    private var repCount = 0
-    
-    // Posture analyzer for form feedback
-    private val postureAnalyzer = PostureAnalyzer()
+    // Maintain legacy state for backward compatibility
+    private var legacyCurrentState = PushUpState.UNKNOWN
     
     // Angle thresholds for push-up detection
     private val downThreshold = 90.0 // degrees - elbow angle when in down position
     private val upThreshold = 160.0 // degrees - elbow angle when in up position
     
     /**
-     * Process a pose and update push-up count with form analysis
+     * Process a pose and update push-up count with form analysis (legacy method)
      * @param pose The detected pose
      * @return PushUpResult with count and analysis
      */
     fun processPoseWithAnalysis(pose: Pose): PushUpResult {
-        val armAngle = calculateArmAngle(pose)
-        var newRepCount = repCount
+        // Use the base class method and convert to legacy format
+        val exerciseResult = super.processPoseWithAnalysis(pose)
         
-        if (armAngle != null) {
-            val newState = when {
-                armAngle < downThreshold -> PushUpState.DOWN_POSITION
-                armAngle > upThreshold -> PushUpState.UP_POSITION
-                else -> currentState // Maintain current state in transition
-            }
-            
-            // Count a rep when transitioning from DOWN to UP
-            if (currentState == PushUpState.DOWN_POSITION && newState == PushUpState.UP_POSITION) {
-                newRepCount++
-                repCount = newRepCount
-            }
-            
-            currentState = newState
+        // Update legacy state
+        legacyCurrentState = when (exerciseResult.currentState) {
+            ExerciseState.START_POSITION -> PushUpState.UP_POSITION
+            ExerciseState.END_POSITION -> PushUpState.DOWN_POSITION
+            ExerciseState.UNKNOWN -> PushUpState.UNKNOWN
         }
         
-        // Analyze posture
-        val postureAnalysis = postureAnalyzer.analyzePose(pose, currentState)
-        
         return PushUpResult(
-            repCount = newRepCount,
-            currentState = currentState,
-            postureAnalysis = postureAnalysis
+            repCount = exerciseResult.repCount,
+            currentState = legacyCurrentState,
+            postureAnalysis = exerciseResult.postureAnalysis
         )
-    }
-    
-    /**
-     * Process a pose and update push-up count (legacy method for compatibility)
-     * @param pose The detected pose
-     * @return Current rep count
-     */
-    fun processPose(pose: Pose): Int {
-        return processPoseWithAnalysis(pose).repCount
     }
     
     /**
      * Calculate the average arm angle (shoulder-elbow-wrist) for both arms
      * Returns null if key landmarks are not detected
      */
-    private fun calculateArmAngle(pose: Pose): Double? {
+    override fun calculateExerciseMetric(pose: Pose): Double? {
         val leftAngle = calculateSingleArmAngle(
             pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER),
             pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW),
@@ -109,6 +86,17 @@ class PushUpDetector {
     }
     
     /**
+     * Determine push-up state based on arm angle
+     */
+    override fun determineState(metric: Double): ExerciseState {
+        return when {
+            metric < downThreshold -> ExerciseState.END_POSITION // Down position
+            metric > upThreshold -> ExerciseState.START_POSITION // Up position
+            else -> currentState // Maintain current state in transition
+        }
+    }
+    
+    /**
      * Calculate angle between three points (shoulder-elbow-wrist)
      */
     private fun calculateSingleArmAngle(
@@ -116,56 +104,20 @@ class PushUpDetector {
         elbow: PoseLandmark?,
         wrist: PoseLandmark?
     ): Double? {
-        if (shoulder == null || elbow == null || wrist == null) return null
-        
-        // Check if landmarks have sufficient confidence
-        if (shoulder.inFrameLikelihood < 0.5f || 
-            elbow.inFrameLikelihood < 0.5f || 
-            wrist.inFrameLikelihood < 0.5f) {
-            return null
-        }
-        
-        val shoulderPos = shoulder.position
-        val elbowPos = elbow.position
-        val wristPos = wrist.position
-        
-        // Vector from elbow to shoulder
-        val v1x = shoulderPos.x - elbowPos.x
-        val v1y = shoulderPos.y - elbowPos.y
-        
-        // Vector from elbow to wrist
-        val v2x = wristPos.x - elbowPos.x
-        val v2y = wristPos.y - elbowPos.y
-        
-        // Calculate angle using dot product
-        val dotProduct = v1x * v2x + v1y * v2y
-        val magnitude1 = sqrt(v1x * v1x + v1y * v1y)
-        val magnitude2 = sqrt(v2x * v2x + v2y * v2y)
-        
-        if (magnitude1 == 0.0f || magnitude2 == 0.0f) return null
-        
-        val cosAngle = dotProduct / (magnitude1 * magnitude2)
-        val clampedCosAngle = cosAngle.coerceIn(-1.0f, 1.0f)
-        
-        return Math.toDegrees(acos(clampedCosAngle.toDouble()))
+        return calculateAngleBetweenPoints(shoulder, elbow, wrist)
     }
     
     /**
-     * Reset the rep counter and posture analyzer
+     * Reset the rep counter and posture analyzer (override to maintain legacy state)
      */
-    fun reset() {
-        repCount = 0
-        currentState = PushUpState.UNKNOWN
-        postureAnalyzer.reset()
+    override fun reset() {
+        super.reset()
+        legacyCurrentState = PushUpState.UNKNOWN
     }
     
     /**
-     * Get current rep count
+     * Get current state (legacy method)
      */
-    fun getRepCount(): Int = repCount
-    
-    /**
-     * Get current state
-     */
-    fun getCurrentState(): PushUpState = currentState
+    fun getCurrentState(): PushUpState = legacyCurrentState
+}
 }

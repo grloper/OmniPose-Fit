@@ -83,12 +83,14 @@ private fun CameraPreviewScreen() {
     // Camera selector state (front/back camera)
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
     
-    // Push-up counter state
+    // Exercise detection state
+    var exerciseResult by remember { mutableStateOf(ExerciseResult(0, ExerciseState.UNKNOWN, ExerciseType.PUSH_UP, null)) }
     var pushUpResult by remember { mutableStateOf(PushUpResult(0, PushUpState.UNKNOWN, null)) }
     
     // UI state
     var showSettingsCard by remember { mutableStateOf(false) }
     var showSummary by remember { mutableStateOf(false) }
+    var showExerciseSelector by remember { mutableStateOf(false) }
     var workoutStartTime by remember { mutableStateOf(System.currentTimeMillis()) }
     var currentFeedbackMessage by remember { mutableStateOf<String?>(null) }
     
@@ -98,7 +100,10 @@ private fun CameraPreviewScreen() {
     val showDebugInfo by settingsManager.showDebugInfo.collectAsState()
     val enhancedUI by settingsManager.enhancedUI.collectAsState()
     
-    // Initialize push-up detector
+    // Initialize exercise manager (replaces push-up detector)
+    val exerciseManager = remember { ExerciseManager() }
+    
+    // Keep push-up detector for backward compatibility
     val pushUpDetector = remember { PushUpDetector() }
     
     // Initialize pose detection components
@@ -118,16 +123,21 @@ private fun CameraPreviewScreen() {
         )
     }
     
-    // Collect pose results and process push-ups
+    // Collect pose results and process exercises
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
             
-            // Process pose for push-up detection with enhanced analysis
-            val newResult = pushUpDetector.processPoseWithAnalysis(poseResult.pose)
+            // Process pose for exercise detection with enhanced analysis
+            val newResult = exerciseManager.processPoseWithAnalysis(poseResult.pose)
+            
+            // Update backward compatibility result for push-ups
+            if (exerciseManager.getCurrentExerciseType() == ExerciseType.PUSH_UP) {
+                pushUpResult = exerciseManager.getPushUpResult(poseResult.pose) ?: PushUpResult(0, PushUpState.UNKNOWN, null)
+            }
             
             // Announce new rep count
-            if (newResult.repCount > pushUpResult.repCount) {
+            if (newResult.repCount > exerciseResult.repCount) {
                 voiceFeedbackManager.announceRepCount(newResult.repCount)
             }
             
@@ -136,8 +146,16 @@ private fun CameraPreviewScreen() {
                 voiceFeedbackManager.announcePostureFeedback(feedback)
                 currentFeedbackMessage = when (feedback) {
                     PostureFeedback.GOOD_FORM -> "Good form!"
-                    PostureFeedback.LOWER_BODY -> "Lower your body more"
-                    PostureFeedback.RAISE_BODY -> "Push up higher"
+                    PostureFeedback.LOWER_BODY -> when (exerciseManager.getCurrentExerciseType()) {
+                        ExerciseType.PUSH_UP -> "Lower your body more"
+                        ExerciseType.SQUAT -> "Squat down deeper"
+                        ExerciseType.PULL_UP -> "Pull yourself higher"
+                    }
+                    PostureFeedback.RAISE_BODY -> when (exerciseManager.getCurrentExerciseType()) {
+                        ExerciseType.PUSH_UP -> "Push up higher"
+                        ExerciseType.SQUAT -> "Stand up straighter"
+                        ExerciseType.PULL_UP -> "Extend your arms fully"
+                    }
                     PostureFeedback.STRAIGHTEN_BACK -> "Keep your back straight"
                     PostureFeedback.ALIGN_HANDS -> "Align your hands"
                     PostureFeedback.SLOW_DOWN -> "Slow down"
@@ -145,7 +163,7 @@ private fun CameraPreviewScreen() {
                 }
             }
             
-            pushUpResult = newResult
+            exerciseResult = newResult
         }
     }
     
@@ -168,17 +186,20 @@ private fun CameraPreviewScreen() {
     // Show workout summary if requested
     if (showSummary) {
         val workoutDuration = System.currentTimeMillis() - workoutStartTime
-        val goodFormReps = (pushUpResult.repCount * (pushUpResult.postureAnalysis?.averageFormQuality ?: 75f) / 100).toInt()
+        val currentReps = exerciseResult.repCount
+        val formQuality = exerciseResult.postureAnalysis?.averageFormQuality ?: 75f
+        val goodFormReps = (currentReps * formQuality / 100).toInt()
         
         WorkoutSummaryScreen(
             summary = WorkoutSummary(
-                totalReps = pushUpResult.repCount,
-                averageFormQuality = pushUpResult.postureAnalysis?.averageFormQuality ?: 0f,
+                totalReps = currentReps,
+                averageFormQuality = formQuality,
                 duration = workoutDuration,
                 goodFormReps = goodFormReps
             ),
             onStartNewWorkout = {
                 showSummary = false
+                exerciseManager.reset()
                 pushUpDetector.reset()
                 voiceFeedbackManager.reset()
                 workoutStartTime = System.currentTimeMillis()
@@ -228,25 +249,37 @@ private fun CameraPreviewScreen() {
             }
         }
         
-        // Enhanced push-up counter with form quality
+        // Enhanced exercise counter with form quality
         if (enhancedUI) {
-            EnhancedPushUpCounter(
-                repCount = pushUpResult.repCount,
-                formQuality = pushUpResult.postureAnalysis?.formQuality ?: 0f,
-                averageFormQuality = pushUpResult.postureAnalysis?.averageFormQuality ?: 0f,
-                hasGoodForm = pushUpResult.postureAnalysis?.hasGoodForm ?: false,
-                onReset = { 
-                    pushUpDetector.reset()
-                    voiceFeedbackManager.reset()
-                    workoutStartTime = System.currentTimeMillis()
-                },
+            Column(
                 modifier = Modifier.align(Alignment.TopCenter)
-            )
+            ) {
+                // Exercise selector (show only when exercise selector is toggled)
+                if (showExerciseSelector) {
+                    ExerciseSelector(
+                        currentExercise = exerciseManager.getCurrentExerciseType(),
+                        onExerciseSelected = { exerciseType ->
+                            exerciseManager.setExerciseType(exerciseType)
+                            showExerciseSelector = false
+                        }
+                    )
+                } else {
+                    // Current exercise info card
+                    ExerciseInfoCard(
+                        exerciseType = exerciseManager.getCurrentExerciseType(),
+                        repCount = exerciseResult.repCount
+                    )
+                }
+            }
         } else {
-            // Legacy simple counter for compatibility
-            PushUpOverlay(
-                repCount = pushUpResult.repCount,
+            // Legacy enhanced counter for backward compatibility
+            EnhancedPushUpCounter(
+                repCount = if (exerciseManager.getCurrentExerciseType() == ExerciseType.PUSH_UP) exerciseResult.repCount else pushUpResult.repCount,
+                formQuality = exerciseResult.postureAnalysis?.formQuality ?: pushUpResult.postureAnalysis?.formQuality ?: 0f,
+                averageFormQuality = exerciseResult.postureAnalysis?.averageFormQuality ?: pushUpResult.postureAnalysis?.averageFormQuality ?: 0f,
+                hasGoodForm = exerciseResult.postureAnalysis?.hasGoodForm ?: pushUpResult.postureAnalysis?.hasGoodForm ?: false,
                 onReset = { 
+                    exerciseManager.reset()
                     pushUpDetector.reset()
                     voiceFeedbackManager.reset()
                     workoutStartTime = System.currentTimeMillis()
@@ -258,7 +291,7 @@ private fun CameraPreviewScreen() {
         // Posture feedback display
         PostureFeedbackDisplay(
             feedbackMessage = currentFeedbackMessage,
-            isGoodForm = pushUpResult.postureAnalysis?.hasGoodForm ?: false,
+            isGoodForm = exerciseResult.postureAnalysis?.hasGoodForm ?: pushUpResult.postureAnalysis?.hasGoodForm ?: false,
             modifier = Modifier.align(Alignment.TopCenter).padding(top = 200.dp)
         )
         
@@ -270,6 +303,20 @@ private fun CameraPreviewScreen() {
                 onVoiceToggle = { settingsManager.setVoiceEnabled(it) },
                 onSpeechRateChange = { settingsManager.setSpeechRate(it) },
                 modifier = Modifier.align(Alignment.CenterStart)
+            )
+        }
+        
+        // Exercise selector toggle button (top right)
+        FloatingActionButton(
+            onClick = { showExerciseSelector = !showExerciseSelector },
+            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+            containerColor = if (showExerciseSelector) Color(0xFF4ECCA3) else Color(0xFF424255),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.FitnessCenter,
+                contentDescription = "Select Exercise",
+                tint = Color.White
             )
         }
         
@@ -299,10 +346,10 @@ private fun CameraPreviewScreen() {
             },
             onSettingsToggle = { showSettingsCard = !showSettingsCard },
             onShowSummary = { 
-                voiceFeedbackManager.announceWorkoutComplete(pushUpResult.repCount)
+                voiceFeedbackManager.announceWorkoutComplete(exerciseResult.repCount, exerciseManager.getCurrentExerciseType())
                 showSummary = true 
             },
-            hasReps = pushUpResult.repCount > 0,
+            hasReps = exerciseResult.repCount > 0,
             modifier = Modifier.align(Alignment.BottomEnd)
         )
     }

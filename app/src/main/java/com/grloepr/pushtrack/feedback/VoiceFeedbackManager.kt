@@ -3,6 +3,7 @@ package com.grloepr.pushtrack.feedback
 import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import com.grloepr.pushtrack.analysis.ExerciseType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -98,18 +99,31 @@ class VoiceFeedbackManager(private val context: Context) {
     }
     
     /**
-     * Announce workout completion
+     * Announce workout completion with exercise type
      */
-    fun announceWorkoutComplete(totalReps: Int) {
+    fun announceWorkoutComplete(totalReps: Int, exerciseType: ExerciseType = ExerciseType.PUSH_UP) {
         if (!isEnabled) return
+        
+        val exerciseName = when (exerciseType) {
+            ExerciseType.PUSH_UP -> if (totalReps == 1) "push-up" else "push-ups"
+            ExerciseType.SQUAT -> if (totalReps == 1) "squat" else "squats"
+            ExerciseType.PULL_UP -> if (totalReps == 1) "pull-up" else "pull-ups"
+        }
         
         val message = when {
             totalReps == 0 -> "Workout complete!"
-            totalReps == 1 -> "Workout complete! 1 push-up done."
-            else -> "Workout complete! $totalReps push-ups done. Great job!"
+            totalReps == 1 -> "Workout complete! 1 $exerciseName done."
+            else -> "Workout complete! $totalReps $exerciseName done. Great job!"
         }
         
         speak(message, "workout_complete")
+    }
+    
+    /**
+     * Announce workout completion (legacy method for backward compatibility)
+     */
+    fun announceWorkoutComplete(totalReps: Int) {
+        announceWorkoutComplete(totalReps, ExerciseType.PUSH_UP)
     }
     
     /**
