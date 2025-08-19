@@ -126,39 +126,3 @@ data class CalibrationSession(
     
     val notes: String? = null
 )
-
-/**
- * Optimized exercise thresholds derived from calibration data
- */
-@Entity(tableName = "exercise_thresholds")
-@Serializable
-data class ExerciseThresholds(
-    @PrimaryKey
-    val exerciseType: String,
-    
-    // Threshold values
-    val upThreshold: Double,
-    val downThreshold: Double,
-    val transitionBuffer: Double, // Hysteresis to prevent jitter
-    
-    // Speed and timing
-    val minRepDuration: Long, // Milliseconds
-    val maxRepDuration: Long,
-    val speedSensitivity: Float,
-    
-    // Quality thresholds
-    val minConfidence: Float,
-    val minLandmarkVisibility: Float,
-    
-    // Derived from session
-    val calibrationSessionId: String?,
-    val createdAt: Long,
-    val lastUpdated: Long,
-    
-    // Performance metrics
-    val accuracyScore: Float?, // How well it performs on validation data
-    val falsePositiveRate: Float?,
-    val falseNegativeRate: Float?,
-    
-    val version: Int = 1
-)

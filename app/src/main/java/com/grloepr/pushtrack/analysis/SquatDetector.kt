@@ -5,13 +5,11 @@ import com.google.mlkit.vision.pose.PoseLandmark
 
 /**
  * Detects squat movements from pose data
- * Uses hip-knee-ankle angles and hip height tracking
  */
 class SquatDetector : ExerciseDetector(ExerciseType.SQUAT) {
-    
-    // Angle thresholds for squat detection (knee angle)
-    private val squatDownThreshold = 90.0 // degrees - knee angle when in squat position
-    private val squatUpThreshold = 160.0 // degrees - knee angle when standing
+    // Default thresholds for squats (knee angle)
+    private val squatUpThreshold = 150.0  // Standing position (knees almost straight)
+    private val squatDownThreshold = 90.0 // Squat position (knees bent)
     
     /**
      * Calculate the average knee angle (hip-knee-ankle) for both legs
@@ -58,5 +56,19 @@ class SquatDetector : ExerciseDetector(ExerciseType.SQUAT) {
         ankle: PoseLandmark?
     ): Double? {
         return calculateAngleBetweenPoints(hip, knee, ankle)
+    }
+    
+    /**
+     * Get default up threshold for squats
+     */
+    override fun getDefaultUpThreshold(): Double {
+        return squatUpThreshold
+    }
+    
+    /**
+     * Get default down threshold for squats
+     */
+    override fun getDefaultDownThreshold(): Double {
+        return squatDownThreshold
     }
 }

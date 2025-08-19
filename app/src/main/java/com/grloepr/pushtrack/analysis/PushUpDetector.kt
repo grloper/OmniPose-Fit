@@ -33,9 +33,15 @@ class PushUpDetector : ExerciseDetector(ExerciseType.PUSH_UP) {
     // Maintain legacy state for backward compatibility
     private var legacyCurrentState = PushUpState.UNKNOWN
     
-    // Angle thresholds for push-up detection
-    private val downThreshold = 90.0 // degrees - elbow angle when in down position
-    private val upThreshold = 160.0 // degrees - elbow angle when in up position
+    // Default angle thresholds for push-up detection
+    private val defaultDownThreshold = 90.0 // degrees - elbow angle when in down position
+    private val defaultUpThreshold = 160.0 // degrees - elbow angle when in up position
+    
+    /**
+     * Get default thresholds
+     */
+    override fun getDefaultUpThreshold(): Double = defaultUpThreshold
+    override fun getDefaultDownThreshold(): Double = defaultDownThreshold
     
     /**
      * Process a pose and update push-up count with form analysis (legacy method)
@@ -90,8 +96,8 @@ class PushUpDetector : ExerciseDetector(ExerciseType.PUSH_UP) {
      */
     override fun determineState(metric: Double): ExerciseState {
         return when {
-            metric < downThreshold -> ExerciseState.END_POSITION // Down position
-            metric > upThreshold -> ExerciseState.START_POSITION // Up position
+            metric < getDownThreshold() -> ExerciseState.END_POSITION // Down position
+            metric > getUpThreshold() -> ExerciseState.START_POSITION // Up position
             else -> currentState // Maintain current state in transition
         }
     }

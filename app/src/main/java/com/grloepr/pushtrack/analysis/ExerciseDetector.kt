@@ -49,6 +49,42 @@ abstract class ExerciseDetector(val exerciseType: ExerciseType) {
     // Posture analyzer for form feedback
     protected val postureAnalyzer = PostureAnalyzer()
     
+    // Dynamic thresholds (can be updated via calibration)
+    protected var dynamicUpThreshold: Double? = null
+    protected var dynamicDownThreshold: Double? = null
+    
+    /**
+     * Update thresholds from calibration data
+     */
+    open fun updateThresholds(upThreshold: Double, downThreshold: Double) {
+        dynamicUpThreshold = upThreshold
+        dynamicDownThreshold = downThreshold
+    }
+    
+    /**
+     * Get current up threshold (dynamic or default)
+     */
+    open fun getUpThreshold(): Double {
+        return dynamicUpThreshold ?: getDefaultUpThreshold()
+    }
+    
+    /**
+     * Get current down threshold (dynamic or default)
+     */
+    open fun getDownThreshold(): Double {
+        return dynamicDownThreshold ?: getDefaultDownThreshold()
+    }
+    
+    /**
+     * Get default up threshold (implemented by subclasses)
+     */
+    protected abstract fun getDefaultUpThreshold(): Double
+    
+    /**
+     * Get default down threshold (implemented by subclasses)
+     */
+    protected abstract fun getDefaultDownThreshold(): Double
+    
     /**
      * Process a pose and update exercise count with form analysis
      * @param pose The detected pose
@@ -171,5 +207,19 @@ abstract class ExerciseDetector(val exerciseType: ExerciseType) {
         repCount = 0
         currentState = ExerciseState.UNKNOWN
         postureAnalyzer.reset()
+    }
+    
+    /**
+     * Public accessor for exercise metric calculation
+     */
+    fun getExerciseMetric(pose: Pose): Double? {
+        return calculateExerciseMetric(pose)
+    }
+    
+    /**
+     * Public accessor for state determination
+     */
+    fun getStateForMetric(metric: Double): ExerciseState {
+        return determineState(metric)
     }
 }

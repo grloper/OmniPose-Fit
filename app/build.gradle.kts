@@ -2,7 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("kotlinx-serialization")
+    kotlin("plugin.serialization") version "2.0.21"
+    kotlin("kapt")
 }
 
 android {
@@ -61,13 +62,10 @@ dependencies {
     // Room database for local data storage
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
-    implementation("androidx.room:room-common:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
     
     // JSON serialization for data export
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
-    
-    // CSV export functionality
-    implementation("com.opencsv:opencsv:5.9")
     
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

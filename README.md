@@ -1,77 +1,81 @@
-# PushTrack - Smart Push-Up Counter App
+# PushTrack - Smart Exercise Counter App
 
-PushTrack is an Android application that uses computer vision and ML Kit to count push-ups in real-time. The app leverages the device's camera and Google's ML Kit Pose Detection to accurately track body movements and count push-up repetitions.
+PushTrack is an advanced Android application that uses your device's camera and on-device machine learning to count exercise repetitions in real-time. It goes beyond simple counting by providing form analysis, voice feedback, and personalized calibration to enhance your workout experience.
 
 ## Features
 
-- **Real-time Push-Up Counting**: Automatically counts push-ups as you perform them
-- **Visual Pose Tracking**: Optional skeleton visualization to show detected body landmarks
-- **Camera Switching**: Support for both front and back cameras
-- **Optimized Performance**: Low-latency detection optimized for real-time tracking
-- **Debug Mode**: Toggle skeleton visualization and debugging information
-- **Modern UI**: Clean, intuitive interface with animated counters and feedback
+- **Multi-Exercise Tracking**: Automatically counts Push-Ups, Squats, and Pull-Ups.
+- **Real-time Rep Counting**: Accurately counts repetitions as you perform them.
+- **Advanced Form Analysis**: Provides real-time feedback on your form, such as "Keep your back straight" or "Lower your body more".
+- **Voice Feedback**: Announces rep counts and form corrections, so you don't have to look at the screen.
+- **Personalized Calibration**: A dedicated mode to analyze your personal movement style and optimize the detection algorithm for you.
+- **Workout Summary**: After your workout, view detailed statistics including total reps, average form quality, duration, and achievements.
+- **Visual Pose Tracking**: Optional skeleton visualization to show detected body landmarks for debugging and analysis.
+- **Modern UI**: Clean, intuitive interface with smooth animations, built with Jetpack Compose and Material 3.
+- **Customizable Settings**: Control voice feedback, speech rate, UI elements, and more.
 
 ## How It Works
 
-PushTrack uses ML Kit's Pose Detection to identify key body landmarks such as shoulders, elbows, and wrists. The app then analyzes the relative positions and angles between these landmarks to determine when a complete push-up has been performed.
+PushTrack uses ML Kit's Pose Detection to identify key body landmarks. The app then analyzes the relative positions and angles between these landmarks to determine when a complete repetition has been performed for the selected exercise.
 
 The detection algorithm is optimized for:
-- Ground position push-ups (phone placed in front of user)
-- Different speeds of movement
-- Various lighting conditions
+- Different exercise types (Push-ups, Squats, Pull-ups)
+- Various speeds of movement
+- Different lighting conditions
 - Multiple body types and positions
 
 ## Requirements
 
 - Android device running Android 7.0 (API level 24) or higher
 - Camera permission enabled
-- Physical device (not an emulator) for camera functionality
+- A physical device is required for camera functionality (emulators are not supported).
 
 ## Usage Instructions
 
-1. **Setup**: Place your phone on the ground in front of you where it can see your upper body
-2. **Grant Permissions**: Allow camera permissions when prompted
-3. **Position Yourself**: Get into push-up position facing the phone
-4. **Start Exercising**: The app will automatically count your push-ups
-5. **Debug Mode**: Tap the "DEBUG" button to show/hide skeleton visualization
-6. **Switch Camera**: Use the camera button to switch between front and back cameras
-7. **Reset Counter**: Press the reset button to start counting from zero
+1. **Setup**: Place your phone where it can see your full body.
+2. **Grant Permissions**: Allow camera permissions when prompted.
+3. **Select Exercise**: Tap the exercise icon in the top right to choose your workout.
+4. **Position Yourself**: Get into the starting position for the selected exercise.
+5. **Start Exercising**: The app will automatically count your reps and provide feedback.
+6. **View Summary**: When you're done, tap the summary button to see your workout results.
+7. **Debug Mode**: Tap the "DEBUG" button to show/hide the skeleton visualization.
+8. **Settings**: Use the settings button to toggle voice feedback and adjust speech rate.
 
 ## Technical Details
 
-PushTrack is built with:
-- Kotlin and Jetpack Compose for UI
-- CameraX API for camera access
-- ML Kit for pose detection
-- Coroutines and Flows for asynchronous processing
-- Material 3 components for modern UI
+PushTrack is built with a modern Android tech stack:
+- **UI**: Kotlin & Jetpack Compose for a declarative and responsive UI.
+- **Camera**: CameraX API for robust camera access and lifecycle management.
+- **ML**: Google's ML Kit for on-device, low-latency pose detection.
+- **Architecture**: ViewModel, Coroutines, and Kotlin Flows for asynchronous processing and state management.
+- **Database**: Room for storing calibration data and user preferences.
+- **UI Components**: Material 3 for a modern look and feel.
 
-The push-up detection algorithm uses multiple signals for accuracy:
-- Elbow angle tracking
-- Head height position
-- Shoulder width changes
-- Movement velocity analysis
+The detection algorithm uses multiple signals for accuracy:
+- **Primary Metrics**: Elbow angle for push-ups, knee angle for squats, etc.
+- **Secondary Metrics**: Head height, shoulder width, and other landmark positions.
+- **Movement Analysis**: Velocity and consistency checks to improve reliability.
 
 ## Development Setup
 
-1. Clone the repository
-2. Open in Android Studio (Arctic Fox or newer)
-3. Connect an Android device with USB debugging enabled
-4. Build and run the app
+1. Clone the repository.
+2. Open the project in Android Studio (Hedgehog or newer).
+3. Connect an Android device with USB debugging enabled.
+4. Build and run the app.
 
 ## Performance Considerations
 
 The app includes several optimizations for real-time performance:
-- Frame skipping for optimal processing
-- Low-resolution image analysis
-- Intelligent landmark filtering
-- Adaptive thresholds based on movement speed
+- **Image Analysis Strategy**: Processes only the latest camera frame to reduce latency.
+- **Low-Resolution Analysis**: Uses a lower resolution for analysis to improve speed without sacrificing accuracy.
+- **Intelligent Landmark Filtering**: Focuses only on the landmarks relevant to the current exercise.
+- **Adaptive Thresholds**: Uses calibration data to adjust detection thresholds to your body.
 
 ## License
 
-[Insert License Information Here]
+This project is licensed under the MIT License. See the [LICENSE.md](LICENSE.md) file for details.
 
 ## Acknowledgments
 
-- Google ML Kit for pose detection capabilities
-- Android Jetpack libraries
+- Google for the powerful ML Kit and Jetpack libraries.
+- The open-source community for their invaluable tools and libraries.

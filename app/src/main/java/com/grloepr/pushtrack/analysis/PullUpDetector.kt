@@ -70,4 +70,18 @@ class PullUpDetector : ExerciseDetector(ExerciseType.PULL_UP) {
             else -> null
         }
     }
+    
+    /**
+     * Get default up threshold for pull-ups
+     */
+    override fun getDefaultUpThreshold(): Double {
+        return pullUpTopThreshold
+    }
+    
+    /**
+     * Get default down threshold for pull-ups
+     */
+    override fun getDefaultDownThreshold(): Double {
+        return pullUpBottomThreshold
+    }
 }
