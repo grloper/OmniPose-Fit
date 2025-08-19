@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.mlkit.vision.pose.Pose
 import com.grloepr.pushtrack.analysis.*
+import com.grloepr.pushtrack.calibration.*
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.feedback.*
@@ -91,6 +92,7 @@ private fun CameraPreviewScreen() {
     var showSettingsCard by remember { mutableStateOf(false) }
     var showSummary by remember { mutableStateOf(false) }
     var showExerciseSelector by remember { mutableStateOf(false) }
+    var showCalibrationPanel by remember { mutableStateOf(false) }
     var workoutStartTime by remember { mutableStateOf(System.currentTimeMillis()) }
     var currentFeedbackMessage by remember { mutableStateOf<String?>(null) }
     
@@ -106,6 +108,11 @@ private fun CameraPreviewScreen() {
     // Keep push-up detector for backward compatibility
     val pushUpDetector = remember { PushUpDetector() }
     
+    // Initialize calibration manager
+    val calibrationManager = remember { 
+        CalibrationManager(context, exerciseManager.getCurrentDetector())
+    }
+    
     // Initialize pose detection components
     val poseDetectorClient = remember { 
         PoseDetectorClient().apply { initialize() }
@@ -114,6 +121,9 @@ private fun CameraPreviewScreen() {
     
     // State for current pose detection result
     var currentPoseResult by remember { mutableStateOf<PoseDetectionResult?>(null) }
+    
+    // Collect calibration state
+    val calibrationState by calibrationManager.calibrationState.collectAsState()
     
     // Update voice feedback settings when they change
     LaunchedEffect(voiceEnabled, speechRate) {
@@ -127,6 +137,11 @@ private fun CameraPreviewScreen() {
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
+            
+            // Process pose for calibration if active
+            if (calibrationState.mode != CalibrationMode.DISABLED) {
+                calibrationManager.processPose(poseResult.pose)
+            }
             
             // Process pose for exercise detection with enhanced analysis
             val newResult = exerciseManager.processPoseWithAnalysis(poseResult.pose)
@@ -176,10 +191,11 @@ private fun CameraPreviewScreen() {
     }
     
     // Clean up when screen is disposed
-    DisposableEffect(poseDetectorClient, voiceFeedbackManager) {
+    DisposableEffect(poseDetectorClient, voiceFeedbackManager, calibrationManager) {
         onDispose {
             poseDetectorClient.close()
             voiceFeedbackManager.shutdown()
+            calibrationManager.cleanup()
         }
     }
 
@@ -306,6 +322,19 @@ private fun CameraPreviewScreen() {
             )
         }
         
+        // Calibration panel (toggleable)
+        if (showCalibrationPanel) {
+            CalibrationPanel(
+                calibrationState = calibrationState,
+                onStartCalibration = { calibrationManager.startCalibration() },
+                onStopCalibration = { calibrationManager.stopCalibration() },
+                onBeginRecording = { calibrationManager.beginRecording() },
+                onAnalyzeData = { calibrationManager.analyzeData() },
+                onResetCalibration = { calibrationManager.resetCalibration() },
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+        
         // Exercise selector toggle button (top right)
         FloatingActionButton(
             onClick = { showExerciseSelector = !showExerciseSelector },
@@ -316,6 +345,20 @@ private fun CameraPreviewScreen() {
             Icon(
                 imageVector = Icons.Default.FitnessCenter,
                 contentDescription = "Select Exercise",
+                tint = Color.White
+            )
+        }
+        
+        // Calibration toggle button (top right, below exercise selector)
+        FloatingActionButton(
+            onClick = { showCalibrationPanel = !showCalibrationPanel },
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 16.dp),
+            containerColor = if (showCalibrationPanel) Color(0xFFFF6B6B) else Color(0xFF424255),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Tune,
+                contentDescription = "Calibration",
                 tint = Color.White
             )
         }

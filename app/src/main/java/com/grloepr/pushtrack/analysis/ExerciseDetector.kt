@@ -222,4 +222,43 @@ abstract class ExerciseDetector(val exerciseType: ExerciseType) {
     fun getStateForMetric(metric: Double): ExerciseState {
         return determineState(metric)
     }
+    
+    /**
+     * Get default up threshold for this exercise type
+     * Should be overridden by subclasses
+     */
+    open fun getDefaultUpThreshold(): Double {
+        return 0.0
+    }
+    
+    /**
+     * Get default down threshold for this exercise type
+     * Should be overridden by subclasses
+     */
+    open fun getDefaultDownThreshold(): Double {
+        return 0.0
+    }
+    
+    /**
+     * Get current up threshold (may be customized via calibration)
+     */
+    open fun getUpThreshold(): Double {
+        return getDefaultUpThreshold()
+    }
+    
+    /**
+     * Get current down threshold (may be customized via calibration)
+     */
+    open fun getDownThreshold(): Double {
+        return getDefaultDownThreshold()
+    }
+    
+    /**
+     * Update thresholds based on calibration results
+     * Should be overridden by subclasses to apply custom thresholds
+     */
+    open fun updateThresholds(upThreshold: Double, downThreshold: Double) {
+        // Default implementation does nothing
+        // Subclasses should override to apply calibrated thresholds
+    }
 }

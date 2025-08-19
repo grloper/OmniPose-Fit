@@ -7,9 +7,13 @@ import com.google.mlkit.vision.pose.PoseLandmark
  * Detects squat movements from pose data
  */
 class SquatDetector : ExerciseDetector(ExerciseType.SQUAT) {
+    // Thresholds for squats (knee angle) - can be updated via calibration
+    private var currentSquatUpThreshold = 150.0  // Standing position (knees almost straight)
+    private var currentSquatDownThreshold = 90.0 // Squat position (knees bent)
+    
     // Default thresholds for squats (knee angle)
-    private val squatUpThreshold = 150.0  // Standing position (knees almost straight)
-    private val squatDownThreshold = 90.0 // Squat position (knees bent)
+    private val defaultSquatUpThreshold = 150.0  // Standing position (knees almost straight)
+    private val defaultSquatDownThreshold = 90.0 // Squat position (knees bent)
     
     /**
      * Calculate the average knee angle (hip-knee-ankle) for both legs
@@ -41,8 +45,8 @@ class SquatDetector : ExerciseDetector(ExerciseType.SQUAT) {
      */
     override fun determineState(metric: Double): ExerciseState {
         return when {
-            metric < squatDownThreshold -> ExerciseState.END_POSITION // Squatting down
-            metric > squatUpThreshold -> ExerciseState.START_POSITION // Standing up
+            metric < currentSquatDownThreshold -> ExerciseState.END_POSITION // Squatting down
+            metric > currentSquatUpThreshold -> ExerciseState.START_POSITION // Standing up
             else -> currentState // Maintain current state in transition
         }
     }
@@ -62,13 +66,35 @@ class SquatDetector : ExerciseDetector(ExerciseType.SQUAT) {
      * Get default up threshold for squats
      */
     override fun getDefaultUpThreshold(): Double {
-        return squatUpThreshold
+        return defaultSquatUpThreshold
     }
     
     /**
      * Get default down threshold for squats
      */
     override fun getDefaultDownThreshold(): Double {
-        return squatDownThreshold
+        return defaultSquatDownThreshold
+    }
+    
+    /**
+     * Get current up threshold (may be calibrated)
+     */
+    override fun getUpThreshold(): Double {
+        return currentSquatUpThreshold
+    }
+    
+    /**
+     * Get current down threshold (may be calibrated)
+     */
+    override fun getDownThreshold(): Double {
+        return currentSquatDownThreshold
+    }
+    
+    /**
+     * Update thresholds based on calibration results
+     */
+    override fun updateThresholds(upThreshold: Double, downThreshold: Double) {
+        currentSquatUpThreshold = upThreshold
+        currentSquatDownThreshold = downThreshold
     }
 }

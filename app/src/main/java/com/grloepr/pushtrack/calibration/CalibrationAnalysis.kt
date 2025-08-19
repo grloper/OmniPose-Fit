@@ -445,8 +445,6 @@ private fun createDefaultAnalysis(): CalibrationAnalysis {
  * Apply calculated thresholds to detector
  */
 fun CalibrationManager.applyThresholds(thresholds: ExerciseThresholds) {
-    // This would need to be implemented in each detector class
-    // For now, we'll log the application
     TerminalLogger.c("CalibrationManager", "🔧 Applying thresholds: ${thresholds.exerciseType}")
     TerminalLogger.table("CalibrationManager", "Applied Thresholds", mapOf(
         "Up threshold" to thresholds.upThreshold,
@@ -456,8 +454,9 @@ fun CalibrationManager.applyThresholds(thresholds: ExerciseThresholds) {
         "Max rep duration" to "${thresholds.maxRepDuration}ms"
     ))
     
-    // TODO: Add method to ExerciseDetector to update thresholds
-    // detector.updateThresholds(thresholds.upThreshold, thresholds.downThreshold)
+    // Apply thresholds to the current detector
+    detector.updateThresholds(thresholds.upThreshold, thresholds.downThreshold)
+}
 }
 
 /**
