@@ -39,8 +39,12 @@ data class ExerciseResult(
  */
 abstract class ExerciseDetector(val exerciseType: ExerciseType) {
     
-    protected var currentState = ExerciseState.UNKNOWN
-    protected var repCount = 0
+    // Make these properties public so they're accessible without separate getter methods
+    var currentState = ExerciseState.UNKNOWN
+        protected set
+    
+    var repCount = 0
+        protected set
     
     // Posture analyzer for form feedback
     protected val postureAnalyzer = PostureAnalyzer()
@@ -168,14 +172,4 @@ abstract class ExerciseDetector(val exerciseType: ExerciseType) {
         currentState = ExerciseState.UNKNOWN
         postureAnalyzer.reset()
     }
-    
-    /**
-     * Get current rep count
-     */
-    fun getRepCount(): Int = repCount
-    
-    /**
-     * Get current state
-     */
-    fun getCurrentState(): ExerciseState = currentState
 }

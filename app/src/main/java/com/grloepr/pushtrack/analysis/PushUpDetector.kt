@@ -42,7 +42,7 @@ class PushUpDetector : ExerciseDetector(ExerciseType.PUSH_UP) {
      * @param pose The detected pose
      * @return PushUpResult with count and analysis
      */
-    fun processPoseWithAnalysis(pose: Pose): PushUpResult {
+    fun processPushUpWithAnalysis(pose: Pose): PushUpResult {
         // Use the base class method and convert to legacy format
         val exerciseResult = super.processPoseWithAnalysis(pose)
         
@@ -108,16 +108,15 @@ class PushUpDetector : ExerciseDetector(ExerciseType.PUSH_UP) {
     }
     
     /**
-     * Reset the rep counter and posture analyzer (override to maintain legacy state)
+     * Reset the legacy state and call parent's reset method
      */
-    override fun reset() {
+    fun resetState() {
         super.reset()
         legacyCurrentState = PushUpState.UNKNOWN
     }
     
     /**
-     * Get current state (legacy method)
+     * Get legacy push-up state
      */
-    fun getCurrentState(): PushUpState = legacyCurrentState
-}
+    fun getLegacyState(): PushUpState = legacyCurrentState
 }

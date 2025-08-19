@@ -60,14 +60,14 @@ class ExerciseManager {
      * Get current rep count
      */
     fun getRepCount(): Int {
-        return getCurrentDetector().getRepCount()
+        return getCurrentDetector().repCount
     }
     
     /**
      * Get current exercise state
      */
     fun getCurrentState(): ExerciseState {
-        return getCurrentDetector().getCurrentState()
+        return getCurrentDetector().currentState
     }
     
     /**
@@ -91,7 +91,7 @@ class ExerciseManager {
      */
     fun getPushUpResult(pose: Pose): PushUpResult? {
         return if (currentExerciseType == ExerciseType.PUSH_UP) {
-            pushUpDetector.processPoseWithAnalysis(pose)
+            pushUpDetector.processPushUpWithAnalysis(pose)
         } else {
             null
         }

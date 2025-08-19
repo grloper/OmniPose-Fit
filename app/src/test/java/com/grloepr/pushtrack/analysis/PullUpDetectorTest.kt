@@ -19,8 +19,8 @@ class PullUpDetectorTest {
     
     @Test
     fun `initial state should have zero reps`() {
-        assertEquals(0, pullUpDetector.getRepCount())
-        assertEquals(ExerciseState.UNKNOWN, pullUpDetector.getCurrentState())
+        assertEquals(0, pullUpDetector.repCount)
+        assertEquals(ExerciseState.UNKNOWN, pullUpDetector.currentState)
     }
     
     @Test
@@ -30,7 +30,7 @@ class PullUpDetectorTest {
         val repCount = pullUpDetector.processPose(pose)
         
         assertEquals(0, repCount) // No rep counted yet
-        assertEquals(ExerciseState.START_POSITION, pullUpDetector.getCurrentState())
+        assertEquals(ExerciseState.START_POSITION, pullUpDetector.currentState)
     }
     
     @Test
@@ -40,7 +40,7 @@ class PullUpDetectorTest {
         val repCount = pullUpDetector.processPose(pose)
         
         assertEquals(0, repCount) // No rep counted yet
-        assertEquals(ExerciseState.END_POSITION, pullUpDetector.getCurrentState())
+        assertEquals(ExerciseState.END_POSITION, pullUpDetector.currentState)
     }
     
     @Test
@@ -48,14 +48,14 @@ class PullUpDetectorTest {
         // First, go to bottom position (hanging)
         val bottomPose = createMockPoseWithShoulderWristDistance(100.0f)
         pullUpDetector.processPose(bottomPose)
-        assertEquals(ExerciseState.END_POSITION, pullUpDetector.getCurrentState())
+        assertEquals(ExerciseState.END_POSITION, pullUpDetector.currentState)
         
         // Then, go to top position (chin up) - should count a rep
         val topPose = createMockPoseWithShoulderWristDistance(20.0f)
         val repCount = pullUpDetector.processPose(topPose)
         
         assertEquals(1, repCount)
-        assertEquals(ExerciseState.START_POSITION, pullUpDetector.getCurrentState())
+        assertEquals(ExerciseState.START_POSITION, pullUpDetector.currentState)
     }
     
     @Test
@@ -68,7 +68,7 @@ class PullUpDetectorTest {
         pullUpDetector.processPose(createMockPoseWithShoulderWristDistance(100.0f))
         assertEquals(2, pullUpDetector.processPose(createMockPoseWithShoulderWristDistance(20.0f)))
         
-        assertEquals(2, pullUpDetector.getRepCount())
+        assertEquals(2, pullUpDetector.repCount)
     }
     
     @Test
@@ -76,13 +76,13 @@ class PullUpDetectorTest {
         // Count some reps first
         pullUpDetector.processPose(createMockPoseWithShoulderWristDistance(100.0f))
         pullUpDetector.processPose(createMockPoseWithShoulderWristDistance(20.0f))
-        assertEquals(1, pullUpDetector.getRepCount())
+        assertEquals(1, pullUpDetector.repCount)
         
         // Reset
         pullUpDetector.reset()
         
-        assertEquals(0, pullUpDetector.getRepCount())
-        assertEquals(ExerciseState.UNKNOWN, pullUpDetector.getCurrentState())
+        assertEquals(0, pullUpDetector.repCount)
+        assertEquals(ExerciseState.UNKNOWN, pullUpDetector.currentState)
     }
     
     @Test
@@ -113,13 +113,13 @@ class PullUpDetectorTest {
     fun `should not count rep when transitioning from top to bottom`() {
         // Start in top position
         pullUpDetector.processPose(createMockPoseWithShoulderWristDistance(20.0f))
-        assertEquals(ExerciseState.START_POSITION, pullUpDetector.getCurrentState())
+        assertEquals(ExerciseState.START_POSITION, pullUpDetector.currentState)
         
         // Go to bottom position - should not count a rep
         val repCount = pullUpDetector.processPose(createMockPoseWithShoulderWristDistance(100.0f))
         
         assertEquals(0, repCount)
-        assertEquals(ExerciseState.END_POSITION, pullUpDetector.getCurrentState())
+        assertEquals(ExerciseState.END_POSITION, pullUpDetector.currentState)
     }
     
     private fun createMockPoseWithShoulderWristDistance(distance: Float): Pose {

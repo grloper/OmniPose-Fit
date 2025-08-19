@@ -21,8 +21,8 @@ class SquatDetectorTest {
     
     @Test
     fun `initial state should have zero reps`() {
-        assertEquals(0, squatDetector.getRepCount())
-        assertEquals(ExerciseState.UNKNOWN, squatDetector.getCurrentState())
+        assertEquals(0, squatDetector.repCount)
+        assertEquals(ExerciseState.UNKNOWN, squatDetector.currentState)
     }
     
     @Test
@@ -32,7 +32,7 @@ class SquatDetectorTest {
         val repCount = squatDetector.processPose(pose)
         
         assertEquals(0, repCount) // No rep counted yet
-        assertEquals(ExerciseState.END_POSITION, squatDetector.getCurrentState())
+        assertEquals(ExerciseState.END_POSITION, squatDetector.currentState)
     }
     
     @Test
@@ -42,7 +42,7 @@ class SquatDetectorTest {
         val repCount = squatDetector.processPose(pose)
         
         assertEquals(0, repCount) // No rep counted yet
-        assertEquals(ExerciseState.START_POSITION, squatDetector.getCurrentState())
+        assertEquals(ExerciseState.START_POSITION, squatDetector.currentState)
     }
     
     @Test
@@ -50,14 +50,14 @@ class SquatDetectorTest {
         // First, go to squat position
         val squatPose = createMockPoseWithKneeAngle(80.0)
         squatDetector.processPose(squatPose)
-        assertEquals(ExerciseState.END_POSITION, squatDetector.getCurrentState())
+        assertEquals(ExerciseState.END_POSITION, squatDetector.currentState)
         
         // Then, go to standing position - should count a rep
         val standPose = createMockPoseWithKneeAngle(170.0)
         val repCount = squatDetector.processPose(standPose)
         
         assertEquals(1, repCount)
-        assertEquals(ExerciseState.START_POSITION, squatDetector.getCurrentState())
+        assertEquals(ExerciseState.START_POSITION, squatDetector.currentState)
     }
     
     @Test
@@ -70,7 +70,7 @@ class SquatDetectorTest {
         squatDetector.processPose(createMockPoseWithKneeAngle(80.0))
         assertEquals(2, squatDetector.processPose(createMockPoseWithKneeAngle(170.0)))
         
-        assertEquals(2, squatDetector.getRepCount())
+        assertEquals(2, squatDetector.repCount)
     }
     
     @Test
@@ -78,13 +78,13 @@ class SquatDetectorTest {
         // Count some reps first
         squatDetector.processPose(createMockPoseWithKneeAngle(80.0))
         squatDetector.processPose(createMockPoseWithKneeAngle(170.0))
-        assertEquals(1, squatDetector.getRepCount())
+        assertEquals(1, squatDetector.repCount)
         
         // Reset
         squatDetector.reset()
         
-        assertEquals(0, squatDetector.getRepCount())
-        assertEquals(ExerciseState.UNKNOWN, squatDetector.getCurrentState())
+        assertEquals(0, squatDetector.repCount)
+        assertEquals(ExerciseState.UNKNOWN, squatDetector.currentState)
     }
     
     @Test
