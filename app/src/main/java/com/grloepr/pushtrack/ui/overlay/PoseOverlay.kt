@@ -12,7 +12,7 @@ import com.google.mlkit.vision.pose.PoseLandmark
 
 /**
  * Composable that overlays pose detection landmarks on the camera preview
- * Transforms coordinates to properly align with camera preview
+ * As per documentation: draws key landmarks as green circles and blue skeleton lines
  */
 @Composable
 fun PoseOverlay(
@@ -27,31 +27,28 @@ fun PoseOverlay(
             val scaleX = size.width / imageWidth
             val scaleY = size.height / imageHeight
             
-            drawPoseLandmarks(detectedPose, scaleX, scaleY, isFrontCamera, imageWidth)
-            drawPoseConnections(detectedPose, scaleX, scaleY, isFrontCamera, imageWidth)
+            // Draw key landmarks as green circles (as documented)
+            drawPoseLandmarks(detectedPose, scaleX, scaleY, imageWidth, isFrontCamera)
+            
+            // Draw skeleton connections as blue lines (as documented)
+            drawPoseConnections(detectedPose, scaleX, scaleY, imageWidth, isFrontCamera)
         }
     }
 }
 
 /**
- * Draw individual pose landmarks as circles with coordinate transformation
+ * Draw key landmarks (shoulders, elbows, wrists, hips) as green circles (as documented)
+ * Only renders landmarks with >50% confidence (as documented)
  */
-private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float, isFrontCamera: Boolean, imageWidth: Int) {
-    // Head landmarks
-    val headLandmarks = listOf(
-        PoseLandmark.NOSE,
-        PoseLandmark.LEFT_EYE_INNER,
-        PoseLandmark.LEFT_EYE,
-        PoseLandmark.LEFT_EYE_OUTER,
-        PoseLandmark.RIGHT_EYE_INNER,
-        PoseLandmark.RIGHT_EYE,
-        PoseLandmark.RIGHT_EYE_OUTER,
-        PoseLandmark.LEFT_EAR,
-        PoseLandmark.RIGHT_EAR
-    )
-    
-    // Upper body landmarks
-    val upperBodyLandmarks = listOf(
+private fun DrawScope.drawPoseLandmarks(
+    pose: Pose,
+    scaleX: Float,
+    scaleY: Float,
+    imageWidth: Int,
+    isFrontCamera: Boolean
+) {
+    // Key landmarks as specified in documentation
+    val keyLandmarks = listOf(
         PoseLandmark.LEFT_SHOULDER,
         PoseLandmark.RIGHT_SHOULDER,
         PoseLandmark.LEFT_ELBOW,
@@ -62,63 +59,15 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float
         PoseLandmark.RIGHT_HIP
     )
     
-    // Lower body landmarks
-    val lowerBodyLandmarks = listOf(
-        PoseLandmark.LEFT_KNEE,
-        PoseLandmark.RIGHT_KNEE,
-        PoseLandmark.LEFT_ANKLE,
-        PoseLandmark.RIGHT_ANKLE,
-        PoseLandmark.LEFT_HEEL,
-        PoseLandmark.RIGHT_HEEL,
-        PoseLandmark.LEFT_FOOT_INDEX,
-        PoseLandmark.RIGHT_FOOT_INDEX
-    )
-    
-    // Draw head landmarks in yellow with higher confidence threshold
-    headLandmarks.forEach { landmarkType ->
+    keyLandmarks.forEach { landmarkType ->
         val landmark = pose.getPoseLandmark(landmarkType)
         landmark?.let {
-            if (it.inFrameLikelihood > 0.6f) {
-                val x = if (isFrontCamera) imageWidth - it.position.x else it.position.x
-                drawCircle(
-                    color = Color.Yellow,
-                    radius = 6f,
-                    center = Offset(
-                        x * scaleX,
-                        it.position.y * scaleY
-                    )
-                )
-            }
-        }
-    }
-    
-    // Draw upper body landmarks in green
-    upperBodyLandmarks.forEach { landmarkType ->
-        val landmark = pose.getPoseLandmark(landmarkType)
-        landmark?.let {
+            // Only render landmarks with >50% confidence (as documented)
             if (it.inFrameLikelihood > 0.5f) {
                 val x = if (isFrontCamera) imageWidth - it.position.x else it.position.x
                 drawCircle(
-                    color = Color.Green,
+                    color = Color.Green,  // Green circles as documented
                     radius = 8f,
-                    center = Offset(
-                        x * scaleX,
-                        it.position.y * scaleY
-                    )
-                )
-            }
-        }
-    }
-    
-    // Draw lower body landmarks in cyan with more permissive confidence
-    lowerBodyLandmarks.forEach { landmarkType ->
-        val landmark = pose.getPoseLandmark(landmarkType)
-        landmark?.let {
-            if (it.inFrameLikelihood > 0.3f) { // Lowered threshold for better leg detection
-                val x = if (isFrontCamera) imageWidth - it.position.x else it.position.x
-                drawCircle(
-                    color = Color.Cyan,
-                    radius = 7f,
                     center = Offset(
                         x * scaleX,
                         it.position.y * scaleY
@@ -130,18 +79,17 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float
 }
 
 /**
- * Draw connections between pose landmarks with coordinate transformation
+ * Draw skeleton connections as blue lines (as documented)
  */
-private fun DrawScope.drawPoseConnections(pose: Pose, scaleX: Float, scaleY: Float, isFrontCamera: Boolean, imageWidth: Int) {
+private fun DrawScope.drawPoseConnections(
+    pose: Pose,
+    scaleX: Float,
+    scaleY: Float,
+    imageWidth: Int,
+    isFrontCamera: Boolean
+) {
+    // Skeleton connections for key body parts
     val connections = listOf(
-        // Face outline
-        Pair(PoseLandmark.LEFT_EAR, PoseLandmark.LEFT_EYE_OUTER),
-        Pair(PoseLandmark.LEFT_EYE_OUTER, PoseLandmark.LEFT_EYE),
-        Pair(PoseLandmark.LEFT_EYE, PoseLandmark.NOSE),
-        Pair(PoseLandmark.NOSE, PoseLandmark.RIGHT_EYE),
-        Pair(PoseLandmark.RIGHT_EYE, PoseLandmark.RIGHT_EYE_OUTER),
-        Pair(PoseLandmark.RIGHT_EYE_OUTER, PoseLandmark.RIGHT_EAR),
-        
         // Shoulders
         Pair(PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER),
         
@@ -156,19 +104,7 @@ private fun DrawScope.drawPoseConnections(pose: Pose, scaleX: Float, scaleY: Flo
         // Torso
         Pair(PoseLandmark.LEFT_SHOULDER, PoseLandmark.LEFT_HIP),
         Pair(PoseLandmark.RIGHT_SHOULDER, PoseLandmark.RIGHT_HIP),
-        Pair(PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP),
-        
-        // Left leg
-        Pair(PoseLandmark.LEFT_HIP, PoseLandmark.LEFT_KNEE),
-        Pair(PoseLandmark.LEFT_KNEE, PoseLandmark.LEFT_ANKLE),
-        Pair(PoseLandmark.LEFT_ANKLE, PoseLandmark.LEFT_HEEL),
-        Pair(PoseLandmark.LEFT_HEEL, PoseLandmark.LEFT_FOOT_INDEX),
-        
-        // Right leg
-        Pair(PoseLandmark.RIGHT_HIP, PoseLandmark.RIGHT_KNEE),
-        Pair(PoseLandmark.RIGHT_KNEE, PoseLandmark.RIGHT_ANKLE),
-        Pair(PoseLandmark.RIGHT_ANKLE, PoseLandmark.RIGHT_HEEL),
-        Pair(PoseLandmark.RIGHT_HEEL, PoseLandmark.RIGHT_FOOT_INDEX)
+        Pair(PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP)
     )
     
     connections.forEach { (startType, endType) ->
@@ -176,13 +112,13 @@ private fun DrawScope.drawPoseConnections(pose: Pose, scaleX: Float, scaleY: Flo
         val endLandmark = pose.getPoseLandmark(endType)
         
         if (startLandmark != null && endLandmark != null &&
-            startLandmark.inFrameLikelihood > 0.3f && endLandmark.inFrameLikelihood > 0.3f) {
+            startLandmark.inFrameLikelihood > 0.5f && endLandmark.inFrameLikelihood > 0.5f) {
             
             val startX = if (isFrontCamera) imageWidth - startLandmark.position.x else startLandmark.position.x
             val endX = if (isFrontCamera) imageWidth - endLandmark.position.x else endLandmark.position.x
             
             drawLine(
-                color = Color.Blue,
+                color = Color.Blue,  // Blue lines as documented
                 start = Offset(
                     startX * scaleX,
                     startLandmark.position.y * scaleY
