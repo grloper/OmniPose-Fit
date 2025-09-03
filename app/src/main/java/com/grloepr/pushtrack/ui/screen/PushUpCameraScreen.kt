@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.mlkit.vision.pose.Pose
 import com.grloepr.pushtrack.analysis.ImageAnalyzer
+import com.grloepr.pushtrack.analysis.PoseDetectionResult
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
@@ -76,13 +77,13 @@ private fun CameraPreviewScreen() {
     }
     val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
     
-    // State for current pose detection result
-    var currentPose by remember { mutableStateOf<Pose?>(null) }
+    // State for current pose detection result with image dimensions
+    var currentPoseResult by remember { mutableStateOf<com.grloepr.pushtrack.analysis.PoseDetectionResult?>(null) }
     
     // Collect pose results (simplified as per documentation)
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collect { poseResult ->
-            currentPose = poseResult.pose
+            currentPoseResult = poseResult
         }
     }
     
@@ -116,11 +117,11 @@ private fun CameraPreviewScreen() {
         )
         
         // Basic pose overlay (as documented: green circles and blue lines)
-        currentPose?.let { pose ->
+        currentPoseResult?.let { poseResult ->
             PoseOverlay(
-                pose = pose,
-                imageWidth = 640,  // Default ML Kit dimensions
-                imageHeight = 480,
+                pose = poseResult.pose,
+                imageWidth = poseResult.imageWidth,  // Use actual image dimensions from ML Kit
+                imageHeight = poseResult.imageHeight,
                 isFrontCamera = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA,
                 modifier = Modifier.fillMaxSize()
             )

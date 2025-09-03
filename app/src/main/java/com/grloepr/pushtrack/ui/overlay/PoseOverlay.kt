@@ -13,19 +13,21 @@ import com.google.mlkit.vision.pose.PoseLandmark
 /**
  * Composable that overlays pose detection landmarks on the camera preview
  * As per documentation: draws key landmarks as green circles and blue skeleton lines
+ * Uses actual image dimensions for proper coordinate transformation
  */
 @Composable
 fun PoseOverlay(
     pose: Pose?,
-    imageWidth: Int = 640,  // Default ML Kit image dimensions
-    imageHeight: Int = 480,
+    imageWidth: Int,
+    imageHeight: Int,
     isFrontCamera: Boolean = false,  // Whether front camera is being used
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
         pose?.let { detectedPose ->
-            val scaleX = size.width / imageWidth
-            val scaleY = size.height / imageHeight
+            // Calculate scaling factors using actual image dimensions
+            val scaleX = size.width / imageWidth.toFloat()
+            val scaleY = size.height / imageHeight.toFloat()
             
             // Draw key landmarks as green circles (as documented)
             drawPoseLandmarks(detectedPose, scaleX, scaleY, imageWidth, isFrontCamera)
