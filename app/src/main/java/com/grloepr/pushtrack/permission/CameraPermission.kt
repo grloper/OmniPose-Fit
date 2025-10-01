@@ -65,7 +65,7 @@ fun CameraPermissionDeniedContent() {
         Spacer(modifier = Modifier.height(16.dp))
         
         Text(
-            text = "This app needs camera access to count your push-ups. Please enable camera permission in settings.",
+            text = "This app needs camera access for pose detection. Please enable camera permission in settings.",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center
         )

@@ -1,25 +1,23 @@
-# PushTrack - Smart Push-Up Counter App
+# Pose Tracker - Real-time Skeleton Overlay App
 
-PushTrack is an Android application that uses computer vision and ML Kit to count push-ups in real-time. The app leverages the device's camera and Google's ML Kit Pose Detection to accurately track body movements and count push-up repetitions.
+A minimal Android application that uses ML Kit Pose Detection to display a live skeleton overlay on camera preview. This app demonstrates real-time pose detection with visual feedback.
 
 ## Features
 
-- **Real-time Push-Up Counting**: Automatically counts push-ups as you perform them
-- **Visual Pose Tracking**: Optional skeleton visualization to show detected body landmarks
+- **Real-time Pose Detection**: Detects body landmarks using ML Kit Pose Detection
+- **Skeleton Overlay**: Visual overlay showing detected pose landmarks and connections
 - **Camera Switching**: Support for both front and back cameras
 - **Optimized Performance**: Low-latency detection optimized for real-time tracking
-- **Debug Mode**: Toggle skeleton visualization and debugging information
-- **Modern UI**: Clean, intuitive interface with animated counters and feedback
+- **Clean UI**: Minimal interface focused on pose visualization
 
 ## How It Works
 
-PushTrack uses ML Kit's Pose Detection to identify key body landmarks such as shoulders, elbows, and wrists. The app then analyzes the relative positions and angles between these landmarks to determine when a complete push-up has been performed.
+The app uses ML Kit's Pose Detection to identify key body landmarks such as shoulders, elbows, wrists, hips, knees, and ankles. These landmarks are displayed as colored circles connected by lines to form a skeleton overlay:
 
-The detection algorithm is optimized for:
-- Ground position push-ups (phone placed in front of user)
-- Different speeds of movement
-- Various lighting conditions
-- Multiple body types and positions
+- **Yellow circles**: Head landmarks (nose, eyes, ears)
+- **Green circles**: Upper body landmarks (shoulders, elbows, wrists, hips)
+- **Cyan circles**: Lower body landmarks (knees, ankles, heels, feet)
+- **Blue lines**: Connections between landmarks showing body structure
 
 ## Requirements
 
@@ -29,28 +27,24 @@ The detection algorithm is optimized for:
 
 ## Usage Instructions
 
-1. **Setup**: Place your phone on the ground in front of you where it can see your upper body
-2. **Grant Permissions**: Allow camera permissions when prompted
-3. **Position Yourself**: Get into push-up position facing the phone
-4. **Start Exercising**: The app will automatically count your push-ups
-5. **Debug Mode**: Tap the "DEBUG" button to show/hide skeleton visualization
-6. **Switch Camera**: Use the camera button to switch between front and back cameras
-7. **Reset Counter**: Press the reset button to start counting from zero
+1. **Grant Permissions**: Allow camera permissions when prompted
+2. **View Pose**: Point the camera at a person to see the skeleton overlay
+3. **Switch Camera**: Tap the camera button to switch between front and back cameras
 
 ## Technical Details
 
-PushTrack is built with:
-- Kotlin and Jetpack Compose for UI
-- CameraX API for camera access
-- ML Kit for pose detection
-- Coroutines and Flows for asynchronous processing
-- Material 3 components for modern UI
+Built with:
+- **Kotlin** and **Jetpack Compose** for UI
+- **CameraX API** for camera access
+- **ML Kit Pose Detection** for body landmark detection
+- **Coroutines and Flows** for asynchronous processing
+- **Material 3** components for modern UI
 
-The push-up detection algorithm uses multiple signals for accuracy:
-- Elbow angle tracking
-- Head height position
-- Shoulder width changes
-- Movement velocity analysis
+The pose detection pipeline:
+- Captures frames from camera at ~15 FPS
+- Processes frames with ML Kit Pose Detection
+- Transforms coordinates to align with camera preview
+- Renders landmarks and connections on overlay
 
 ## Development Setup
 
@@ -61,11 +55,11 @@ The push-up detection algorithm uses multiple signals for accuracy:
 
 ## Performance Considerations
 
-The app includes several optimizations for real-time performance:
-- Frame skipping for optimal processing
-- Low-resolution image analysis
-- Intelligent landmark filtering
-- Adaptive thresholds based on movement speed
+The app includes optimizations for real-time performance:
+- Frame throttling to ~15 FPS to prevent overload
+- Backpressure strategy to drop frames when processing falls behind
+- Background processing for pose detection
+- Adaptive confidence thresholds for different body parts
 
 ## License
 
