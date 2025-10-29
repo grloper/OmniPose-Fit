@@ -9,35 +9,139 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
+import com.grloepr.pushtrack.analysis.PoseDetectionResult
+import kotlin.math.min
 
 /**
- * Composable that overlays pose detection landmarks on the camera preview
- * Transforms coordinates to properly align with camera preview
+ * Configurable styling and thresholds for the pose overlay.
+ * Keeping this data class allows easy tweaking for different cameras (e.g. Galaxy S24 Ultra) without
+ * touching the rendering code.
+ */
+data class PoseOverlayStyle(
+    val headConfidenceThreshold: Float = 0.6f,
+    val upperBodyConfidenceThreshold: Float = 0.5f,
+    val lowerBodyConfidenceThreshold: Float = 0.3f,
+    val connectionConfidenceThreshold: Float = 0.3f,
+    val headRadius: Float = 6f,
+    val upperBodyRadius: Float = 8f,
+    val lowerBodyRadius: Float = 7f,
+    val headColor: Color = Color(0xFFFFD54F),
+    val upperBodyColor: Color = Color(0xFF00E676),
+    val lowerBodyColor: Color = Color(0xFF64B5F6),
+    val connectionColor: Color = Color(0xFF4CAF50),
+    val connectionStrokeWidth: Float = 4f
+)
+
+/**
+ * Composable that overlays pose detection landmarks on the camera preview.
+ * Handles rotation, aspect-ratio differences, and front camera mirroring so the skeleton sticks to
+ * the subject regardless of device orientation or resolution.
  */
 @Composable
 fun PoseOverlay(
-    pose: Pose?,
-    imageWidth: Int = 640,  // Default ML Kit image dimensions
-    imageHeight: Int = 480,
-    isFrontCamera: Boolean = false,  // Whether front camera is being used
-    modifier: Modifier = Modifier
+    poseResult: PoseDetectionResult,
+    isFrontCamera: Boolean,
+    modifier: Modifier = Modifier,
+    style: PoseOverlayStyle = PoseOverlayStyle()
 ) {
     Canvas(modifier = modifier.fillMaxSize()) {
-        pose?.let { detectedPose ->
-            val scaleX = size.width / imageWidth
-            val scaleY = size.height / imageHeight
-            
-            drawPoseLandmarks(detectedPose, scaleX, scaleY, isFrontCamera, imageWidth)
-            drawPoseConnections(detectedPose, scaleX, scaleY, isFrontCamera, imageWidth)
-        }
+        val transformer = PoseCoordinateTransformer(
+            imageWidth = poseResult.imageWidth,
+            imageHeight = poseResult.imageHeight,
+            rotationDegrees = poseResult.rotationDegrees,
+            isFrontCamera = isFrontCamera,
+            canvasWidth = size.width,
+            canvasHeight = size.height
+        )
+
+        drawPoseLandmarks(poseResult.pose, transformer, style)
+        drawPoseConnections(poseResult.pose, transformer, style)
     }
 }
 
 /**
- * Draw individual pose landmarks as circles with coordinate transformation
+ * Converts ML Kit landmark positions into canvas coordinates, accounting for rotation, mirroring,
+ * and aspect-ratio scaling.
  */
-private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float, isFrontCamera: Boolean, imageWidth: Int) {
-    // Head landmarks
+private class PoseCoordinateTransformer(
+    private val imageWidth: Int,
+    private val imageHeight: Int,
+    private val rotationDegrees: Int,
+    private val isFrontCamera: Boolean,
+    canvasWidth: Float,
+    canvasHeight: Float
+) {
+    private val effectiveImageWidth: Float
+    private val effectiveImageHeight: Float
+    private val scaleX: Float
+    private val scaleY: Float
+    private val offsetX: Float
+    private val offsetY: Float
+
+    init {
+        // The imageWidth and imageHeight here are the actual media dimensions from the camera
+        // ML Kit's InputImage.fromMediaImage() with rotationDegrees rotates the internal processing,
+        // but the landmarks are returned in the COORDINATE SYSTEM of the rotated image
+        
+        // When we pass rotationDegrees to InputImage, ML Kit:
+        // 1. Processes the image with that rotation
+        // 2. Returns landmarks in the coordinate system of the ROTATED image
+        // So for 90°/270°, landmarks are in a coordinate system where width/height are swapped
+        
+        // Since landmarks are in rotated coordinates, we need to account for dimension swap
+        val swapped = rotationDegrees == 90 || rotationDegrees == 270
+        effectiveImageWidth = if (swapped) imageHeight.toFloat() else imageWidth.toFloat()
+        effectiveImageHeight = if (swapped) imageWidth.toFloat() else imageHeight.toFloat()
+
+        // Calculate scaling to fit canvas (matching PreviewView FIT_CENTER behavior)
+        val scale = min(canvasWidth / effectiveImageWidth, canvasHeight / effectiveImageHeight)
+        scaleX = scale
+        scaleY = scale
+
+        // Calculate centering offsets for letterboxing/pillarboxing
+        val scaledWidth = effectiveImageWidth * scaleX
+        val scaledHeight = effectiveImageHeight * scaleY
+        offsetX = (canvasWidth - scaledWidth) / 2f
+        offsetY = (canvasHeight - scaledHeight) / 2f
+        
+        // Debug logging
+        println("PoseTransformer: media=$imageWidth×$imageHeight, rotation=$rotationDegrees°")
+        println("PoseTransformer: effective=$effectiveImageWidth×$effectiveImageHeight, canvas=$canvasWidth×$canvasHeight")
+        println("PoseTransformer: scale=$scale, offsets=($offsetX,$offsetY), isFront=$isFrontCamera")
+    }
+
+    fun map(landmark: PoseLandmark): Offset {
+        // ML Kit returns coordinates in the rotated image coordinate space
+        // Since we pass rotationDegrees to InputImage.fromMediaImage(), the landmarks
+        // are already in the coordinate system that matches display orientation
+        
+        var x = landmark.position.x
+        var y = landmark.position.y
+        
+        // Apply horizontal mirroring for front camera
+        // PreviewView automatically mirrors the camera preview for front camera,
+        // so we need to mirror the landmarks to match
+        if (isFrontCamera) {
+            x = effectiveImageWidth - x
+        }
+
+        // Ensure coordinates are within bounds
+        x = x.coerceIn(0f, effectiveImageWidth)
+        y = y.coerceIn(0f, effectiveImageHeight)
+
+        // Scale and translate to canvas coordinates (accounting for FIT_CENTER)
+        val canvasX = offsetX + x * scaleX
+        val canvasY = offsetY + y * scaleY
+
+        return Offset(canvasX, canvasY)
+    }
+}
+
+private fun DrawScope.drawPoseLandmarks(
+    pose: Pose,
+    transformer: PoseCoordinateTransformer,
+    style: PoseOverlayStyle
+) {
     val headLandmarks = listOf(
         PoseLandmark.NOSE,
         PoseLandmark.LEFT_EYE_INNER,
@@ -49,8 +153,7 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float
         PoseLandmark.LEFT_EAR,
         PoseLandmark.RIGHT_EAR
     )
-    
-    // Upper body landmarks
+
     val upperBodyLandmarks = listOf(
         PoseLandmark.LEFT_SHOULDER,
         PoseLandmark.RIGHT_SHOULDER,
@@ -61,8 +164,7 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float
         PoseLandmark.LEFT_HIP,
         PoseLandmark.RIGHT_HIP
     )
-    
-    // Lower body landmarks
+
     val lowerBodyLandmarks = listOf(
         PoseLandmark.LEFT_KNEE,
         PoseLandmark.RIGHT_KNEE,
@@ -73,125 +175,86 @@ private fun DrawScope.drawPoseLandmarks(pose: Pose, scaleX: Float, scaleY: Float
         PoseLandmark.LEFT_FOOT_INDEX,
         PoseLandmark.RIGHT_FOOT_INDEX
     )
-    
-    // Draw head landmarks in yellow with higher confidence threshold
-    headLandmarks.forEach { landmarkType ->
-        val landmark = pose.getPoseLandmark(landmarkType)
-        landmark?.let {
-            if (it.inFrameLikelihood > 0.6f) {
-                val x = if (isFrontCamera) imageWidth - it.position.x else it.position.x
+
+    headLandmarks.forEach { type ->
+        pose.getPoseLandmark(type)
+            ?.takeIf { it.inFrameLikelihood >= style.headConfidenceThreshold }
+            ?.let { landmark ->
+                val center = transformer.map(landmark)
                 drawCircle(
-                    color = Color.Yellow,
-                    radius = 6f,
-                    center = Offset(
-                        x * scaleX,
-                        it.position.y * scaleY
-                    )
+                    color = style.headColor,
+                    radius = style.headRadius,
+                    center = center
                 )
             }
-        }
     }
-    
-    // Draw upper body landmarks in green
-    upperBodyLandmarks.forEach { landmarkType ->
-        val landmark = pose.getPoseLandmark(landmarkType)
-        landmark?.let {
-            if (it.inFrameLikelihood > 0.5f) {
-                val x = if (isFrontCamera) imageWidth - it.position.x else it.position.x
+
+    upperBodyLandmarks.forEach { type ->
+        pose.getPoseLandmark(type)
+            ?.takeIf { it.inFrameLikelihood >= style.upperBodyConfidenceThreshold }
+            ?.let { landmark ->
+                val center = transformer.map(landmark)
                 drawCircle(
-                    color = Color.Green,
-                    radius = 8f,
-                    center = Offset(
-                        x * scaleX,
-                        it.position.y * scaleY
-                    )
+                    color = style.upperBodyColor,
+                    radius = style.upperBodyRadius,
+                    center = center
                 )
             }
-        }
     }
-    
-    // Draw lower body landmarks in cyan with more permissive confidence
-    lowerBodyLandmarks.forEach { landmarkType ->
-        val landmark = pose.getPoseLandmark(landmarkType)
-        landmark?.let {
-            if (it.inFrameLikelihood > 0.3f) { // Lowered threshold for better leg detection
-                val x = if (isFrontCamera) imageWidth - it.position.x else it.position.x
+
+    lowerBodyLandmarks.forEach { type ->
+        pose.getPoseLandmark(type)
+            ?.takeIf { it.inFrameLikelihood >= style.lowerBodyConfidenceThreshold }
+            ?.let { landmark ->
+                val center = transformer.map(landmark)
                 drawCircle(
-                    color = Color.Cyan,
-                    radius = 7f,
-                    center = Offset(
-                        x * scaleX,
-                        it.position.y * scaleY
-                    )
+                    color = style.lowerBodyColor,
+                    radius = style.lowerBodyRadius,
+                    center = center
                 )
             }
-        }
     }
 }
 
-/**
- * Draw connections between pose landmarks with coordinate transformation
- */
-private fun DrawScope.drawPoseConnections(pose: Pose, scaleX: Float, scaleY: Float, isFrontCamera: Boolean, imageWidth: Int) {
+private fun DrawScope.drawPoseConnections(
+    pose: Pose,
+    transformer: PoseCoordinateTransformer,
+    style: PoseOverlayStyle
+) {
     val connections = listOf(
-        // Face outline
-        Pair(PoseLandmark.LEFT_EAR, PoseLandmark.LEFT_EYE_OUTER),
-        Pair(PoseLandmark.LEFT_EYE_OUTER, PoseLandmark.LEFT_EYE),
-        Pair(PoseLandmark.LEFT_EYE, PoseLandmark.NOSE),
-        Pair(PoseLandmark.NOSE, PoseLandmark.RIGHT_EYE),
-        Pair(PoseLandmark.RIGHT_EYE, PoseLandmark.RIGHT_EYE_OUTER),
-        Pair(PoseLandmark.RIGHT_EYE_OUTER, PoseLandmark.RIGHT_EAR),
-        
-        // Shoulders
-        Pair(PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER),
-        
-        // Left arm
-        Pair(PoseLandmark.LEFT_SHOULDER, PoseLandmark.LEFT_ELBOW),
-        Pair(PoseLandmark.LEFT_ELBOW, PoseLandmark.LEFT_WRIST),
-        
-        // Right arm
-        Pair(PoseLandmark.RIGHT_SHOULDER, PoseLandmark.RIGHT_ELBOW),
-        Pair(PoseLandmark.RIGHT_ELBOW, PoseLandmark.RIGHT_WRIST),
-        
-        // Torso
-        Pair(PoseLandmark.LEFT_SHOULDER, PoseLandmark.LEFT_HIP),
-        Pair(PoseLandmark.RIGHT_SHOULDER, PoseLandmark.RIGHT_HIP),
-        Pair(PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP),
-        
-        // Left leg
-        Pair(PoseLandmark.LEFT_HIP, PoseLandmark.LEFT_KNEE),
-        Pair(PoseLandmark.LEFT_KNEE, PoseLandmark.LEFT_ANKLE),
-        Pair(PoseLandmark.LEFT_ANKLE, PoseLandmark.LEFT_HEEL),
-        Pair(PoseLandmark.LEFT_HEEL, PoseLandmark.LEFT_FOOT_INDEX),
-        
-        // Right leg
-        Pair(PoseLandmark.RIGHT_HIP, PoseLandmark.RIGHT_KNEE),
-        Pair(PoseLandmark.RIGHT_KNEE, PoseLandmark.RIGHT_ANKLE),
-        Pair(PoseLandmark.RIGHT_ANKLE, PoseLandmark.RIGHT_HEEL),
-        Pair(PoseLandmark.RIGHT_HEEL, PoseLandmark.RIGHT_FOOT_INDEX)
+        PoseLandmark.LEFT_SHOULDER to PoseLandmark.RIGHT_SHOULDER,
+        PoseLandmark.LEFT_SHOULDER to PoseLandmark.LEFT_ELBOW,
+        PoseLandmark.LEFT_ELBOW to PoseLandmark.LEFT_WRIST,
+        PoseLandmark.RIGHT_SHOULDER to PoseLandmark.RIGHT_ELBOW,
+        PoseLandmark.RIGHT_ELBOW to PoseLandmark.RIGHT_WRIST,
+        PoseLandmark.LEFT_SHOULDER to PoseLandmark.LEFT_HIP,
+        PoseLandmark.RIGHT_SHOULDER to PoseLandmark.RIGHT_HIP,
+        PoseLandmark.LEFT_HIP to PoseLandmark.RIGHT_HIP,
+        PoseLandmark.LEFT_HIP to PoseLandmark.LEFT_KNEE,
+        PoseLandmark.LEFT_KNEE to PoseLandmark.LEFT_ANKLE,
+        PoseLandmark.LEFT_ANKLE to PoseLandmark.LEFT_HEEL,
+        PoseLandmark.LEFT_HEEL to PoseLandmark.LEFT_FOOT_INDEX,
+        PoseLandmark.RIGHT_HIP to PoseLandmark.RIGHT_KNEE,
+        PoseLandmark.RIGHT_KNEE to PoseLandmark.RIGHT_ANKLE,
+        PoseLandmark.RIGHT_ANKLE to PoseLandmark.RIGHT_HEEL,
+        PoseLandmark.RIGHT_HEEL to PoseLandmark.RIGHT_FOOT_INDEX
     )
-    
+
     connections.forEach { (startType, endType) ->
-        val startLandmark = pose.getPoseLandmark(startType)
-        val endLandmark = pose.getPoseLandmark(endType)
-        
-        if (startLandmark != null && endLandmark != null &&
-            startLandmark.inFrameLikelihood > 0.3f && endLandmark.inFrameLikelihood > 0.3f) {
-            
-            val startX = if (isFrontCamera) imageWidth - startLandmark.position.x else startLandmark.position.x
-            val endX = if (isFrontCamera) imageWidth - endLandmark.position.x else endLandmark.position.x
-            
+        val start = pose.getPoseLandmark(startType)
+        val end = pose.getPoseLandmark(endType)
+
+        if (start != null && end != null &&
+            start.inFrameLikelihood >= style.connectionConfidenceThreshold &&
+            end.inFrameLikelihood >= style.connectionConfidenceThreshold
+        ) {
+            val startOffset = transformer.map(start)
+            val endOffset = transformer.map(end)
             drawLine(
-                color = Color.Blue,
-                start = Offset(
-                    startX * scaleX,
-                    startLandmark.position.y * scaleY
-                ),
-                end = Offset(
-                    endX * scaleX,
-                    endLandmark.position.y * scaleY
-                ),
-                strokeWidth = 3f
+                color = style.connectionColor,
+                start = startOffset,
+                end = endOffset,
+                strokeWidth = style.connectionStrokeWidth
             )
         }
     }

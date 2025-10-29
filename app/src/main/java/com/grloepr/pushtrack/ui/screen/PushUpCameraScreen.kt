@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -21,6 +22,7 @@ import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
 import com.grloepr.pushtrack.permission.CameraPermissionRequest
 import com.grloepr.pushtrack.pose.PoseDetectorClient
 import com.grloepr.pushtrack.ui.overlay.PoseOverlay
+import com.grloepr.pushtrack.ui.overlay.PoseOverlayStyle
 
 /**
  * Main camera screen with pose detection overlay
@@ -77,12 +79,22 @@ private fun CameraPreviewScreen() {
         }
     }
 
+    val density = LocalDensity.current
+    val overlayStyle = remember(density) {
+        PoseOverlayStyle(
+            headRadius = with(density) { 5.dp.toPx() },
+            upperBodyRadius = with(density) { 6.dp.toPx() },
+            lowerBodyRadius = with(density) { 5.dp.toPx() },
+            connectionStrokeWidth = with(density) { 2.dp.toPx() }
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Camera preview
         AndroidView(
             factory = { context ->
                 PreviewView(context).apply {
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
+                    scaleType = PreviewView.ScaleType.FIT_CENTER
                 }
             },
             modifier = Modifier.fillMaxSize(),
@@ -102,11 +114,10 @@ private fun CameraPreviewScreen() {
         // Pose overlay
         currentPoseResult?.let { poseResult ->
             PoseOverlay(
-                pose = poseResult.pose,
-                imageWidth = poseResult.imageWidth,
-                imageHeight = poseResult.imageHeight,
+                poseResult = poseResult,
                 isFrontCamera = cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                style = overlayStyle
             )
         }
         
