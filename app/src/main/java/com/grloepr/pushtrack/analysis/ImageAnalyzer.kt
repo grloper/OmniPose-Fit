@@ -19,7 +19,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 data class PoseDetectionResult(
     val pose: Pose,
     val imageWidth: Int,
-    val imageHeight: Int
+    val imageHeight: Int,
+    val rotationDegrees: Int
 )
 
 /**
@@ -53,15 +54,26 @@ class ImageAnalyzer(
         
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
+            // Get the ACTUAL media image dimensions (before rotation)
+            val mediaWidth = mediaImage.width
+            val mediaHeight = mediaImage.height
+            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+            
             // Convert ImageProxy to InputImage with proper rotation
             val inputImage = InputImage.fromMediaImage(
                 mediaImage,
-                imageProxy.imageInfo.rotationDegrees
+                rotationDegrees
             )
             
-            // Store image dimensions for coordinate transformation
-            val imageWidth = inputImage.width
-            val imageHeight = inputImage.height
+            // Debug logging (run first time only to avoid spam)
+            if (lastAnalysisTime == currentTime - targetAnalysisInterval) {
+                println("ImageAnalyzer: media=${mediaWidth}×${mediaHeight}, inputImage=${inputImage.width}×${inputImage.height}, rotation=$rotationDegrees°")
+            }
+            
+            // Use the media dimensions, not the InputImage dimensions
+            // InputImage dimensions are already rotated, but we need original for proper coordinate mapping
+            val imageWidth = mediaWidth
+            val imageHeight = mediaHeight
             
             // Process pose detection on background thread
             poseDetectorClient.detectPose(
@@ -69,7 +81,14 @@ class ImageAnalyzer(
                 onSuccess = { pose ->
                     // Emit pose results with image dimensions to collectors on background thread
                     analysisScope.launch {
-                        _poseResults.tryEmit(PoseDetectionResult(pose, imageWidth, imageHeight))
+                        _poseResults.tryEmit(
+                            PoseDetectionResult(
+                                pose = pose,
+                                imageWidth = imageWidth,
+                                imageHeight = imageHeight,
+                                rotationDegrees = rotationDegrees
+                            )
+                        )
                         isProcessing = false
                         imageProxy.close()
                     }

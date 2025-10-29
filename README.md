@@ -1,77 +1,46 @@
-# PushTrack - Smart Push-Up Counter App
+# Pushup Counter Video
 
-PushTrack is an Android application that uses computer vision and ML Kit to count push-ups in real-time. The app leverages the device's camera and Google's ML Kit Pose Detection to accurately track body movements and count push-up repetitions.
+An Android app for exercise tracking with pose detection using ML Kit.
 
-## Features
+## Recent Fixes
 
-- **Real-time Push-Up Counting**: Automatically counts push-ups as you perform them
-- **Visual Pose Tracking**: Optional skeleton visualization to show detected body landmarks
-- **Camera Switching**: Support for both front and back cameras
-- **Optimized Performance**: Low-latency detection optimized for real-time tracking
-- **Debug Mode**: Toggle skeleton visualization and debugging information
-- **Modern UI**: Clean, intuitive interface with animated counters and feedback
+### Pose Detection Coordinate Transformation
 
-## How It Works
+Fixed the horizontal flip issue where skeleton was appearing mirrored (head right, legs left).
 
-PushTrack uses ML Kit's Pose Detection to identify key body landmarks such as shoulders, elbows, and wrists. The app then analyzes the relative positions and angles between these landmarks to determine when a complete push-up has been performed.
+**Current State:** 
+- Removed manual rotation transformations
+- ML Kit's `InputImage.fromMediaImage()` with rotationDegrees handles rotation internally
+- Landmarks are returned in the coordinate space of the rotated image
+- Added mirroring for front camera to match PreviewView behavior
 
-The detection algorithm is optimized for:
-- Ground position push-ups (phone placed in front of user)
-- Different speeds of movement
-- Various lighting conditions
-- Multiple body types and positions
+**Testing Required:**
+1. Test on actual device - the skeleton may still need adjustments
+2. Check debug logs in logcat for coordinate values
+3. Try both front and back cameras
+4. Test in different device orientations
 
-## Requirements
+## Build Instructions
 
-- Android device running Android 7.0 (API level 24) or higher
-- Camera permission enabled
-- Physical device (not an emulator) for camera functionality
+The app requires Java 11+ and Android SDK 24+.
 
-## Usage Instructions
+```bash
+./gradlew assembleDebug
+```
 
-1. **Setup**: Place your phone on the ground in front of you where it can see your upper body
-2. **Grant Permissions**: Allow camera permissions when prompted
-3. **Position Yourself**: Get into push-up position facing the phone
-4. **Start Exercising**: The app will automatically count your push-ups
-5. **Debug Mode**: Tap the "DEBUG" button to show/hide skeleton visualization
-6. **Switch Camera**: Use the camera button to switch between front and back cameras
-7. **Reset Counter**: Press the reset button to start counting from zero
+Note: The gradle build currently has JVM heap size issues. If build fails, reduce memory in `gradle.properties`.
 
-## Technical Details
+## Key Files Modified
 
-PushTrack is built with:
-- Kotlin and Jetpack Compose for UI
-- CameraX API for camera access
-- ML Kit for pose detection
-- Coroutines and Flows for asynchronous processing
-- Material 3 components for modern UI
+- `app/src/main/java/com/grloepr/pushtrack/ui/overlay/PoseOverlay.kt` - Coordinate transformation
+- `app/src/main/java/com/grloepr/pushtrack/analysis/ImageAnalyzer.kt` - Image processing
+- Debug logging added to help diagnose remaining issues
 
-The push-up detection algorithm uses multiple signals for accuracy:
-- Elbow angle tracking
-- Head height position
-- Shoulder width changes
-- Movement velocity analysis
+## Next Steps
 
-## Development Setup
+Once skeleton alignment is confirmed working:
+1. Implement exercise counting logic
+2. Add form analysis
+3. Create exercise library
+4. Add AI assistant for real-time feedback
 
-1. Clone the repository
-2. Open in Android Studio (Arctic Fox or newer)
-3. Connect an Android device with USB debugging enabled
-4. Build and run the app
-
-## Performance Considerations
-
-The app includes several optimizations for real-time performance:
-- Frame skipping for optimal processing
-- Low-resolution image analysis
-- Intelligent landmark filtering
-- Adaptive thresholds based on movement speed
-
-## License
-
-[Insert License Information Here]
-
-## Acknowledgments
-
-- Google ML Kit for pose detection capabilities
-- Android Jetpack libraries
