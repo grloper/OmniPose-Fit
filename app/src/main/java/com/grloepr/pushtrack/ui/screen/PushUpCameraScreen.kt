@@ -2,7 +2,16 @@ package com.grloepr.pushtrack.ui.screen
 
 import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,7 +30,11 @@ import com.grloepr.pushtrack.analysis.PoseDetectionResult
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.exercise.ExerciseAnalyzer
+import com.grloepr.pushtrack.exercise.ExerciseAnalysis
+import com.grloepr.pushtrack.exercise.ExerciseState
 import com.grloepr.pushtrack.exercise.ExerciseType
+import com.grloepr.pushtrack.exercise.FormFeedback
+import com.grloepr.pushtrack.exercise.FormSeverity
 import com.grloepr.pushtrack.permission.CameraPermissionDeniedContent
 import com.grloepr.pushtrack.permission.CameraPermissionRequest
 import com.grloepr.pushtrack.pose.PoseDetectorClient
@@ -87,19 +100,33 @@ private fun CameraPreviewScreen(
     // State for current pose detection result
     var currentPoseResult by remember { mutableStateOf<PoseDetectionResult?>(null) }
     
-    // Exercise analyzer and rep counting
-    var repCount by remember { mutableStateOf(0) }
-    val exerciseAnalyzer = remember {
-        ExerciseAnalyzer(exerciseType) { newRepCount ->
-            repCount = newRepCount
+    // Exercise analyzer and rich analysis
+    var latestAnalysis by remember {
+        mutableStateOf(
+            ExerciseAnalysis(
+                state = ExerciseState.Waiting,
+                repCount = 0,
+                repDelta = 0,
+                form = FormFeedback.neutral(),
+                poseVisible = false,
+                timestampMs = 0L
+            )
+        )
+    }
+    val exerciseAnalyzer = remember(exerciseType) {
+        ExerciseAnalyzer(exerciseType) { analysis ->
+            latestAnalysis = analysis
         }
+    }
+
+    LaunchedEffect(exerciseAnalyzer) {
+        exerciseAnalyzer.reset()
     }
     
     // Collect pose results and analyze for exercise
     LaunchedEffect(imageAnalyzer) {
         imageAnalyzer.poseResults.collect { poseResult ->
             currentPoseResult = poseResult
-            // Analyze pose for exercise detection
             exerciseAnalyzer.analyzePose(poseResult.pose)
         }
     }
@@ -156,10 +183,19 @@ private fun CameraPreviewScreen(
         // Rep counter display at top
         RepCounterCard(
             exerciseType = exerciseType,
-            repCount = repCount,
+            repCount = latestAnalysis.repCount,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(16.dp)
+        )
+
+        FormFeedbackPanel(
+            feedback = latestAnalysis.form,
+            poseVisible = latestAnalysis.poseVisible,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+                .width(260.dp)
         )
         
         // Bottom controls
@@ -191,7 +227,6 @@ private fun CameraPreviewScreen(
             FloatingActionButton(
                 onClick = {
                     exerciseAnalyzer.reset()
-                    repCount = 0
                 },
                 containerColor = Color.Red.copy(alpha = 0.8f)
             ) {
@@ -252,6 +287,73 @@ fun RepCounterCard(
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@Composable
+private fun FormFeedbackPanel(
+    feedback: FormFeedback,
+    poseVisible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val primary = feedback.primarySignal
+    val accentColor = when (primary?.severity ?: FormSeverity.INFO) {
+        FormSeverity.INFO -> MaterialTheme.colorScheme.primary
+        FormSeverity.WARNING -> MaterialTheme.colorScheme.tertiary
+        FormSeverity.CRITICAL -> MaterialTheme.colorScheme.error
+    }
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Black.copy(alpha = 0.35f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = if (poseVisible) feedback.headline else "Step fully into frame",
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            LinearProgressIndicator(
+                progress = feedback.overallScore.coerceIn(0f, 1f),
+                trackColor = Color.White.copy(alpha = 0.2f),
+                color = accentColor,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            val issues = feedback.signals.sortedBy { it.score }
+            if (issues.isEmpty()) {
+                Text(
+                    text = "Smooth form detected",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 14.sp
+                )
+            } else {
+                issues.take(3).forEach { signal ->
+                    val tagColor = when (signal.severity) {
+                        FormSeverity.INFO -> Color(0xFF4CAF50)
+                        FormSeverity.WARNING -> Color(0xFFFFA000)
+                        FormSeverity.CRITICAL -> Color(0xFFE53935)
+                    }
+                    Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                        Text(
+                            text = signal.label,
+                            color = tagColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = signal.message,
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
         }
     }
 }
