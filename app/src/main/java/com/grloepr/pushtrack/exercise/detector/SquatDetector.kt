@@ -82,15 +82,15 @@ class SquatDetector : ExerciseDetector {
         )
         val smoothedTorsoAngle = torsoAngleSmoother.add(torsoAngles.averageOrNull())
 
-        val downByAngle = smoothedKneeAngle != null && smoothedKneeAngle < 110.0
-        val upByAngle = smoothedKneeAngle != null && smoothedKneeAngle > 155.0
+        val downByAngle = smoothedKneeAngle != null && smoothedKneeAngle < 120.0
+        val upByAngle = smoothedKneeAngle != null && smoothedKneeAngle > 145.0
 
-        val downByDepth = smoothedHipDepth != null && smoothedHipDepth < 0.34
-        val upByDepth = smoothedHipDepth != null && smoothedHipDepth > 0.44
+        val downByDepth = smoothedHipDepth != null && smoothedHipDepth < 0.40
+        val upByDepth = smoothedHipDepth != null && smoothedHipDepth > 0.48
 
         val candidateState = when {
-            downByAngle && downByDepth -> ExerciseState.Down
-            upByAngle && upByDepth -> ExerciseState.Up
+            downByAngle || downByDepth -> ExerciseState.Down
+            upByAngle || upByDepth -> ExerciseState.Up
             else -> ExerciseState.Waiting
         }
 

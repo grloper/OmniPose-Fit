@@ -84,18 +84,18 @@ class PushupDetector : ExerciseDetector {
         val baseline = baselineGap ?: smoothedGap
         val depthDelta = if (baseline != null && smoothedGap != null) baseline - smoothedGap else 0.0
 
-        val elbowDown = smoothedElbow != null && smoothedElbow < 116.0
-        val elbowUp = smoothedElbow != null && smoothedElbow > 158.0
+        val elbowDown = smoothedElbow != null && smoothedElbow < 130.0
+        val elbowUp = smoothedElbow != null && smoothedElbow > 150.0
 
-        val depthDown = smoothedGap != null && baseline != null && depthDelta > 0.12
-        val depthRecovered = smoothedGap != null && baseline != null && smoothedGap > baseline - 0.05
+        val depthDown = smoothedGap != null && baseline != null && depthDelta > 0.10
+        val depthRecovered = smoothedGap != null && baseline != null && smoothedGap > baseline - 0.08
 
-        val fallbackDown = smoothedGap != null && smoothedGap < 0.34
-        val fallbackUp = smoothedGap != null && smoothedGap > 0.46
+        val fallbackDown = smoothedGap != null && smoothedGap < 0.40
+        val fallbackUp = smoothedGap != null && smoothedGap > 0.50
 
         val candidateState = when {
-            (elbowDown && (depthDown || fallbackDown)) -> ExerciseState.Down
-            (elbowUp && (depthRecovered || fallbackUp)) -> ExerciseState.Up
+            (elbowDown || depthDown || fallbackDown) -> ExerciseState.Down
+            (elbowUp || depthRecovered || fallbackUp) -> ExerciseState.Up
             else -> ExerciseState.Waiting
         }
 
