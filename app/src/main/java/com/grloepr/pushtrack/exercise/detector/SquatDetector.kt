@@ -96,6 +96,15 @@ class SquatDetector : ExerciseDetector {
 
         val stabilizedState = stabilizeState(candidateState, timestampMs)
         val repCompleted = currentState == ExerciseState.Down && stabilizedState == ExerciseState.Up
+        
+        // Debug logging
+        android.util.Log.d("SquatDetector",
+            "hipDepth=$smoothedHipDepth, kneeAngle=$smoothedKneeAngle, " +
+            "downByAngle=$downByAngle, upByAngle=$upByAngle, " +
+            "downByDepth=$downByDepth, upByDepth=$upByDepth, " +
+            "candidate=$candidateState, current=$currentState, stabilized=$stabilizedState, " +
+            "repCompleted=$repCompleted")
+        
         currentState = stabilizedState
 
         val depthScore = depthScore(smoothedHipDepth)

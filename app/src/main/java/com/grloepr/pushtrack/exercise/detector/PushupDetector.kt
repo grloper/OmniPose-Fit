@@ -106,6 +106,14 @@ class PushupDetector : ExerciseDetector {
             baselineGap = baseline?.let { existing -> existing * 0.8 + smoothedGap * 0.2 } ?: smoothedGap
         }
 
+        // Debug logging
+        android.util.Log.d("PushupDetector", 
+            "gap=$smoothedGap, baseline=$baseline, depthDelta=$depthDelta, " +
+            "elbow=$smoothedElbow, elbowDown=$elbowDown, elbowUp=$elbowUp, " +
+            "depthDown=$depthDown, depthRecovered=$depthRecovered, " +
+            "candidate=$candidateState, current=$currentState, stabilized=$stabilizedState, " +
+            "repCompleted=$repCompleted")
+
         currentState = stabilizedState
 
         val depthScore = depthScore(depthDelta)

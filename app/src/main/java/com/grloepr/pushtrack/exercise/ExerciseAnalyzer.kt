@@ -16,6 +16,10 @@ class ExerciseAnalyzer(
         ExerciseType.PUSHUP -> PushupDetector()
         ExerciseType.SQUAT -> SquatDetector()
         ExerciseType.PULLUP -> object : ExerciseDetector {
+            private var currentState: ExerciseState = ExerciseState.Waiting
+            private var lastStateChangeTime = 0L
+            private val minStateDurationMs = 250L
+
             override fun analyze(pose: Pose, timestampMs: Long): DetectorResult {
                 val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
                 val leftShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
@@ -33,21 +37,43 @@ class ExerciseAnalyzer(
                 val noseY = nose!!.position.y
                 val shoulderY = (leftShoulder!!.position.y + rightShoulder!!.position.y) / 2f
 
-                val state = when {
-                    noseY < shoulderY - 12f -> ExerciseState.Up
-                    noseY > shoulderY + 12f -> ExerciseState.Down
-                    else -> ExerciseState.Waiting
+                val candidateState = when {
+                    noseY < shoulderY - 50f -> ExerciseState.Up
+                    noseY > shoulderY + 50f -> ExerciseState.Down
+                    else -> currentState
                 }
 
+                val stabilizedState = if (candidateState == currentState || candidateState == ExerciseState.Waiting) {
+                    currentState
+                } else {
+                    val elapsed = timestampMs - lastStateChangeTime
+                    if (elapsed >= minStateDurationMs) {
+                        lastStateChangeTime = timestampMs
+                        candidateState
+                    } else {
+                        currentState
+                    }
+                }
+
+                val repCompleted = currentState == ExerciseState.Down && stabilizedState == ExerciseState.Up
+                currentState = stabilizedState
+
                 return DetectorResult(
-                    state = state,
-                    repCompleted = false,
+                    state = stabilizedState,
+                    repCompleted = repCompleted,
                     formFeedback = FormFeedback.neutral("Stay smooth on the bar")
                 )
             }
 
-            override fun onPoseLost(timestampMs: Long) {}
-            override fun reset() {}
+            override fun onPoseLost(timestampMs: Long) {
+                currentState = ExerciseState.Waiting
+                lastStateChangeTime = timestampMs
+            }
+
+            override fun reset() {
+                currentState = ExerciseState.Waiting
+                lastStateChangeTime = 0L
+            }
         }
     }
 
@@ -61,9 +87,16 @@ class ExerciseAnalyzer(
         val detectorResult = if (hasCoreLandmarks(pose)) {
             val result = detector.analyze(pose, timestamp)
             if (!result.poseVisible) detector.onPoseLost(timestamp)
+            
+            // Debug logging for troubleshooting
+            android.util.Log.d("ExerciseAnalyzer", 
+                "$exerciseType: state=${result.state}, repCompleted=${result.repCompleted}, " +
+                "poseVisible=${result.poseVisible}, score=${result.formFeedback.overallScore}")
+            
             result
         } else {
             detector.onPoseLost(timestamp)
+            android.util.Log.d("ExerciseAnalyzer", "$exerciseType: Missing core landmarks")
             DetectorResult(
                 state = ExerciseState.Waiting,
                 repCompleted = false,
