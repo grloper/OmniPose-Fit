@@ -134,7 +134,7 @@ class PushupDetector : ExerciseDetector {
         val overallScore = signals.takeIf { it.isNotEmpty() }
             ?.let { list ->
                 val weightSum = list.sumOf { it.weight.toDouble() }
-                val weighted = list.sumOf { it.weight * it.score }
+                val weighted = list.sumOf { (it.weight * it.score).toDouble() }
                 (weighted / weightSum).toFloat()
             } ?: 0.6f
 
