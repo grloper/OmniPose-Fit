@@ -17,3 +17,7 @@ local.properties
 # ML Kit and pose detection temp files
 *.tmp
 /tmp/
+
+# Kotlin compiler output
+*.class
+META-INF/
