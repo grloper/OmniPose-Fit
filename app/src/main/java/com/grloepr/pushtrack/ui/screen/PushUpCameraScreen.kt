@@ -25,11 +25,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalContext
 import com.grloepr.pushtrack.analysis.ImageAnalyzer
 import com.grloepr.pushtrack.analysis.PoseDetectionResult
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.exercise.ExerciseAnalyzer
+import com.grloepr.pushtrack.tts.TextToSpeechManager
 import com.grloepr.pushtrack.exercise.ExerciseAnalysis
 import com.grloepr.pushtrack.exercise.ExerciseState
 import com.grloepr.pushtrack.exercise.ExerciseType
@@ -87,9 +89,13 @@ private fun CameraPreviewScreen(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProvider = rememberCameraProvider()
+    val context = LocalContext.current
     
     // Camera selector - default to FRONT for selfie mode
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_FRONT_CAMERA) }
+    
+    // Initialize Text-to-Speech
+    val ttsManager = remember { TextToSpeechManager(context) }
     
     // Initialize pose detection components
     val poseDetectorClient = remember { 
@@ -131,10 +137,18 @@ private fun CameraPreviewScreen(
         }
     }
     
+    // Announce rep count when it changes
+    LaunchedEffect(latestAnalysis.repCount) {
+        if (latestAnalysis.repDelta > 0) {
+            ttsManager.announceRepCount(latestAnalysis.repCount)
+        }
+    }
+    
     // Clean up when screen is disposed
     DisposableEffect(poseDetectorClient) {
         onDispose {
             poseDetectorClient.close()
+            ttsManager.shutdown()
         }
     }
 
