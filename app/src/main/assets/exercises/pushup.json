@@ -1,0 +1,20 @@
+{
+  "exercise_id": "pushup",
+  "display_name": "Push-Up",
+  "target_muscles": ["pectorals", "triceps", "deltoids", "core"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"],
+    "secondary_angle": ["LEFT_SHOULDER", "LEFT_HIP", "LEFT_KNEE"]
+  },
+  "states": {
+    "START": { "primary_angle": { "min": 150, "max": 180 } },
+    "INFLECTION_POINT": { "primary_angle": { "less_than": 95 } },
+    "END": { "primary_angle": { "min": 150, "max": 180 } }
+  },
+  "validation": {
+    "optimal_camera_plane": "SAGITTAL",
+    "required_joints_visible": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST", "LEFT_HIP"]
+  },
+  "tempo": { "pulse_interval_ms": 2500 },
+  "mastery_reps": 10
+}

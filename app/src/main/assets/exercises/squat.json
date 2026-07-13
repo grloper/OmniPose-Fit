@@ -1,0 +1,20 @@
+{
+  "exercise_id": "squat",
+  "display_name": "Deep Squat",
+  "target_muscles": ["quadriceps", "gluteus_maximus", "hamstrings"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_HIP", "LEFT_KNEE", "LEFT_ANKLE"],
+    "secondary_angle": ["LEFT_SHOULDER", "LEFT_HIP", "LEFT_KNEE"]
+  },
+  "states": {
+    "START": { "primary_angle": { "min": 160, "max": 180 } },
+    "INFLECTION_POINT": { "primary_angle": { "less_than": 90 } },
+    "END": { "primary_angle": { "min": 160, "max": 180 } }
+  },
+  "validation": {
+    "optimal_camera_plane": "SAGITTAL",
+    "required_joints_visible": ["LEFT_HIP", "LEFT_KNEE", "LEFT_ANKLE", "RIGHT_KNEE"]
+  },
+  "tempo": { "pulse_interval_ms": 3000 },
+  "mastery_reps": 10
+}
