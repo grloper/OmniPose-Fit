@@ -1,0 +1,19 @@
+{
+  "exercise_id": "pullup",
+  "display_name": "Pull-Up",
+  "target_muscles": ["latissimus_dorsi", "biceps", "forearms", "trapezius"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"]
+  },
+  "states": {
+    "START": { "primary_angle": { "min": 150, "max": 180 } },
+    "INFLECTION_POINT": { "primary_angle": { "less_than": 75 } },
+    "END": { "primary_angle": { "min": 150, "max": 180 } }
+  },
+  "validation": {
+    "optimal_camera_plane": "FRONTAL",
+    "required_joints_visible": ["LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_ELBOW", "RIGHT_ELBOW", "LEFT_WRIST", "RIGHT_WRIST"]
+  },
+  "tempo": { "pulse_interval_ms": 3200 },
+  "mastery_reps": 5
+}
