@@ -99,7 +99,7 @@ object CalisthenicsSkillGraph {
             tagline = "First taste of hand balancing",
             description = "Knees perch on bent elbows, toes float. Trains wrists, balance reflexes and the confidence to be upside-down-ish.",
             branch = SkillBranch.BALANCE, tier = 3, prerequisites = listOf("diamond_pushup"),
-            schemaId = null,
+            schemaId = "frog_stand",
             targetMuscles = setOf(MuscleGroup.FOREARMS, MuscleGroup.DELTOIDS, MuscleGroup.CORE),
             difficulty = 3, masteryReps = 1, icon = SkillIcon.BALANCE
         ),
@@ -108,7 +108,7 @@ object CalisthenicsSkillGraph {
             tagline = "Own the inverted line",
             description = "Chest-to-wall handstand hold. Stacks shoulders over wrists and builds the overhead endurance a freestanding handstand needs.",
             branch = SkillBranch.BALANCE, tier = 4, prerequisites = listOf("frog_stand"),
-            schemaId = null,
+            schemaId = "wall_handstand",
             targetMuscles = setOf(MuscleGroup.DELTOIDS, MuscleGroup.TRAPEZIUS, MuscleGroup.CORE, MuscleGroup.FOREARMS),
             difficulty = 4, masteryReps = 1, icon = SkillIcon.BALANCE
         ),
@@ -117,7 +117,7 @@ object CalisthenicsSkillGraph {
             tagline = "The freestanding crown jewel",
             description = "Balance on two hands, body in one silent line. The signature calisthenics skill — equal parts strength, alignment and calm.",
             branch = SkillBranch.BALANCE, tier = 5, prerequisites = listOf("wall_handstand"),
-            schemaId = null,
+            schemaId = "handstand",
             targetMuscles = setOf(MuscleGroup.DELTOIDS, MuscleGroup.TRAPEZIUS, MuscleGroup.CORE, MuscleGroup.FOREARMS),
             difficulty = 5, masteryReps = 1, icon = SkillIcon.CAPSTONE
         ),
@@ -128,7 +128,7 @@ object CalisthenicsSkillGraph {
             tagline = "Grip is the gateway",
             description = "Passive hang from the bar. Decompresses the spine and forges the grip endurance every pull skill hangs on.",
             branch = SkillBranch.PULL, tier = 0, prerequisites = emptyList(),
-            schemaId = null,
+            schemaId = "dead_hang",
             targetMuscles = setOf(MuscleGroup.FOREARMS, MuscleGroup.LATS),
             difficulty = 1, masteryReps = 1, icon = SkillIcon.HANG
         ),
@@ -137,7 +137,7 @@ object CalisthenicsSkillGraph {
             tagline = "Wake up the shoulder blades",
             description = "From a dead hang, pull the shoulder blades down without bending the elbows. The hidden first inch of every pull-up.",
             branch = SkillBranch.PULL, tier = 1, prerequisites = listOf("dead_hang"),
-            schemaId = null,
+            schemaId = "scapular_pulls",
             targetMuscles = setOf(MuscleGroup.TRAPEZIUS, MuscleGroup.LATS),
             difficulty = 2, masteryReps = 8, icon = SkillIcon.PULL
         ),
@@ -175,7 +175,7 @@ object CalisthenicsSkillGraph {
             tagline = "Horizontal begins here",
             description = "Hang, tuck the knees, pull the body flat under the bar. Teaches the straight-arm lat pressure the full lever is made of.",
             branch = SkillBranch.LEVER, tier = 3, prerequisites = listOf("pullup"),
-            schemaId = null,
+            schemaId = "tuck_front_lever",
             targetMuscles = setOf(MuscleGroup.LATS, MuscleGroup.CORE, MuscleGroup.LOWER_BACK),
             difficulty = 4, masteryReps = 1, icon = SkillIcon.LEVER
         ),
@@ -184,7 +184,7 @@ object CalisthenicsSkillGraph {
             tagline = "The horizontal masterpiece",
             description = "Body board-flat under the bar, arms straight. A world-class display of lat and core strength — one of calisthenics' great summits.",
             branch = SkillBranch.LEVER, tier = 5, prerequisites = listOf("tuck_front_lever", "frog_stand"),
-            schemaId = null,
+            schemaId = "front_lever",
             targetMuscles = setOf(MuscleGroup.LATS, MuscleGroup.CORE, MuscleGroup.LOWER_BACK, MuscleGroup.GLUTES),
             difficulty = 5, masteryReps = 1, icon = SkillIcon.CAPSTONE
         ),

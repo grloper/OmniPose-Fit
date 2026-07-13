@@ -23,8 +23,13 @@ data class EngineFrame(
     val partialReps: Int,
     /** 1 when this frame registered a partial rep, else 0. */
     val partialRepDelta: Int,
-    /** 0 at the START posture → 1 at the inflection point (movement depth). */
+    /**
+     * 0 at the START posture → 1 at the inflection point (movement depth).
+     * For hold schemas this becomes hold completion while the hold is live.
+     */
     val progress: Float,
+    /** Elapsed milliseconds of the current isometric hold; 0 when not holding. */
+    val holdMs: Long,
     /** Smoothed value of the schema's primary tracked angle, in degrees. */
     val primaryAngle: Double?,
     val poseVisible: Boolean,
@@ -41,6 +46,7 @@ data class EngineFrame(
             partialReps = 0,
             partialRepDelta = 0,
             progress = 0f,
+            holdMs = 0L,
             primaryAngle = null,
             poseVisible = false,
             alignment = CameraAlignment.searching(),
@@ -56,6 +62,10 @@ data class EngineFrame(
  * "squat" is — the [ExerciseSchema] declares which joint angles matter and the
  * angle windows that define the START, INFLECTION_POINT and END states; the
  * engine walks poses through them and counts complete cycles.
+ *
+ * Hold schemas ([ExerciseSchema.isHold]) run a reduced machine instead:
+ * SEARCHING → READY → BOTTOM (holding), and keeping the INFLECTION_POINT
+ * posture for the schema's hold target counts as one rep.
  */
 class DynamicExerciseEngine(
     val schema: ExerciseSchema,
@@ -72,6 +82,8 @@ class DynamicExerciseEngine(
     private var startHeldSince = -1L
     private var lastPhaseChangeAt = 0L
     private var repStartedAt = -1L
+    private var holdStartedAt = -1L
+    private var holdCounted = false
 
     fun reset() {
         angleSmoothers.values.forEach { it.clear() }
@@ -83,6 +95,8 @@ class DynamicExerciseEngine(
         startHeldSince = -1L
         lastPhaseChangeAt = 0L
         repStartedAt = -1L
+        holdStartedAt = -1L
+        holdCounted = false
         onFrame(EngineFrame.idle(System.currentTimeMillis()))
     }
 
@@ -94,8 +108,10 @@ class DynamicExerciseEngine(
             if (phase != EnginePhase.SEARCHING) changePhase(EnginePhase.SEARCHING, timestampMs)
             startHeldSince = -1L
             repStartedAt = -1L
+            holdStartedAt = -1L
+            holdCounted = false
             emit(
-                repDelta = 0, partialDelta = 0, progress = 0f, primaryAngle = null,
+                repDelta = 0, partialDelta = 0, progress = 0f, holdMs = 0L, primaryAngle = null,
                 poseVisible = false, alignment = alignment, timestampMs = timestampMs
             )
             return
@@ -111,7 +127,6 @@ class DynamicExerciseEngine(
             )
         }
         val primaryAngle = angles[schema.primaryAngleName]
-        val progress = schema.progressFor(primaryAngle)
 
         val startSatisfied = stateSatisfied(SchemaStates.START, angles)
         val inflectionSatisfied = stateSatisfied(SchemaStates.INFLECTION, angles)
@@ -124,6 +139,72 @@ class DynamicExerciseEngine(
 
         var repDelta = 0
         var partialDelta = 0
+
+        if (schema.isHold) {
+            val target = requireNotNull(schema.holdTargetMs)
+            when (phase) {
+                EnginePhase.SEARCHING -> {
+                    if (startSatisfied) {
+                        if (startHeldSince < 0) startHeldSince = timestampMs
+                        if (timestampMs - startHeldSince >= START_HOLD_MS) {
+                            changePhase(EnginePhase.READY, timestampMs)
+                        }
+                    } else {
+                        startHeldSince = -1L
+                    }
+                }
+
+                EnginePhase.READY -> {
+                    if (inflectionSatisfied) {
+                        holdStartedAt = timestampMs
+                        holdCounted = false
+                        changePhase(EnginePhase.BOTTOM, timestampMs)
+                    }
+                }
+
+                EnginePhase.BOTTOM -> {
+                    if (inflectionSatisfied) {
+                        if (!holdCounted && timestampMs - holdStartedAt >= target) {
+                            repCount += 1
+                            repDelta = 1
+                            holdCounted = true
+                            tempo.onRepCompleted(timestampMs)
+                        }
+                    } else if (canChangePhase(timestampMs)) {
+                        if (!holdCounted && timestampMs - holdStartedAt >= MIN_PARTIAL_HOLD_MS) {
+                            // Broke the position after a real attempt — partial hold.
+                            partialReps += 1
+                            partialDelta = 1
+                        }
+                        holdStartedAt = -1L
+                        changePhase(EnginePhase.READY, timestampMs)
+                    }
+                }
+
+                // Rep-cycle phases never occur while a hold schema drives the engine.
+                EnginePhase.ECCENTRIC, EnginePhase.CONCENTRIC ->
+                    changePhase(EnginePhase.READY, timestampMs)
+            }
+
+            val holdMs = if (phase == EnginePhase.BOTTOM && holdStartedAt >= 0) {
+                timestampMs - holdStartedAt
+            } else {
+                0L
+            }
+            emit(
+                repDelta = repDelta,
+                partialDelta = partialDelta,
+                progress = (holdMs.toDouble() / target).toFloat().coerceIn(0f, 1f),
+                holdMs = holdMs,
+                primaryAngle = primaryAngle,
+                poseVisible = true,
+                alignment = alignment,
+                timestampMs = timestampMs
+            )
+            return
+        }
+
+        val progress = schema.progressFor(primaryAngle)
 
         when (phase) {
             EnginePhase.SEARCHING -> {
@@ -184,6 +265,7 @@ class DynamicExerciseEngine(
             repDelta = repDelta,
             partialDelta = partialDelta,
             progress = progress,
+            holdMs = 0L,
             primaryAngle = primaryAngle,
             poseVisible = true,
             alignment = alignment,
@@ -221,6 +303,7 @@ class DynamicExerciseEngine(
         repDelta: Int,
         partialDelta: Int,
         progress: Float,
+        holdMs: Long,
         primaryAngle: Double?,
         poseVisible: Boolean,
         alignment: CameraAlignment,
@@ -234,6 +317,7 @@ class DynamicExerciseEngine(
                 partialReps = partialReps,
                 partialRepDelta = partialDelta,
                 progress = progress,
+                holdMs = holdMs,
                 primaryAngle = primaryAngle,
                 poseVisible = poseVisible,
                 alignment = alignment,
@@ -248,6 +332,9 @@ class DynamicExerciseEngine(
         const val SMOOTHING_WINDOW = 5
         const val START_HOLD_MS = 350L
         const val PHASE_DEBOUNCE_MS = 180L
+
+        /** A broken hold shorter than this is ignored rather than scored as a partial. */
+        const val MIN_PARTIAL_HOLD_MS = 1500L
 
         /** A joint counts as visible above this in-frame likelihood. */
         const val VISIBILITY_CONFIDENCE = 0.5f

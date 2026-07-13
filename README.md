@@ -113,6 +113,18 @@ The engine walks SEARCHING → READY → ECCENTRIC → BOTTOM → CONCENTRIC and
 counts a rep when the athlete returns to the `END` window after touching the
 inflection point; turnarounds before full depth are surfaced as partial reps.
 
+Isometric skills (dead hang, handstands, levers, frog stand) add a `hold`
+block and describe the hold posture in `INFLECTION_POINT`:
+
+```json
+"hold": { "target_ms": 20000 }
+```
+
+The engine then runs a reduced SEARCHING → READY → BOTTOM (holding) machine:
+keeping the posture for `target_ms` scores one rep, breaking it early after a
+real attempt scores a partial, and the HUD dial counts hold seconds instead
+of reps.
+
 ### Technique demo videos
 
 The skill detail sheet plays a looping, muted demo from

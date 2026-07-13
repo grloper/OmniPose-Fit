@@ -1,0 +1,29 @@
+{
+  "exercise_id": "scapular_pulls",
+  "display_name": "Scapular Pulls",
+  "target_muscles": ["trapezius", "latissimus_dorsi"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_ELBOW", "LEFT_SHOULDER", "LEFT_HIP"],
+    "elbow_lockout": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"]
+  },
+  "states": {
+    "START": {
+      "primary_angle": { "min": 165, "max": 180 },
+      "elbow_lockout": { "min": 150 }
+    },
+    "INFLECTION_POINT": {
+      "primary_angle": { "less_than": 158 },
+      "elbow_lockout": { "min": 150 }
+    },
+    "END": {
+      "primary_angle": { "min": 165, "max": 180 },
+      "elbow_lockout": { "min": 150 }
+    }
+  },
+  "validation": {
+    "optimal_camera_plane": "FRONTAL",
+    "required_joints_visible": ["LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST", "LEFT_HIP"]
+  },
+  "tempo": { "pulse_interval_ms": 2500 },
+  "mastery_reps": 8
+}

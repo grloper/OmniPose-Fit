@@ -67,8 +67,16 @@ data class ExerciseSchema(
     val optimalPlane: CameraPlane,
     val requiredJointsVisible: List<Int>,
     val tempoPulseIntervalMs: Long,
-    val masteryReps: Int
+    val masteryReps: Int,
+    /**
+     * For isometric skills (hangs, handstands, levers): how long the
+     * INFLECTION_POINT posture must be held for one "rep". Null for
+     * ordinary rep-cycle movements.
+     */
+    val holdTargetMs: Long? = null
 ) {
+    val isHold: Boolean get() = holdTargetMs != null
+
     val primaryAngleName: String =
         if (trackingAngles.containsKey(PRIMARY_ANGLE)) PRIMARY_ANGLE else trackingAngles.keys.first()
 

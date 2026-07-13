@@ -149,6 +149,74 @@ class DynamicExerciseEngineTest {
         assertEquals(0f, schema.progressFor(null), 0.001f)
     }
 
+    /** Same geometry as the squat schema, but scored as an isometric hold. */
+    private fun squatHoldSchema(targetMs: Long) = squatSchema().copy(
+        id = "test_hold",
+        holdTargetMs = targetMs
+    )
+
+    @Test
+    fun `holding the target posture long enough counts one rep`() {
+        val recorder = Recorder()
+        val engine = DynamicExerciseEngine(squatHoldSchema(targetMs = 2000L), recorder::onFrame)
+
+        var t = drive(engine, 0L, List(6) { 172.0 })          // hold START → READY
+        assertEquals(EnginePhase.READY, recorder.last.phase)
+
+        t = drive(engine, t, List(6) { 82.0 })                // sink into the hold posture
+        assertEquals(EnginePhase.BOTTOM, recorder.last.phase)
+        assertEquals(0, recorder.totalReps)
+
+        t = drive(engine, t, List(25) { 82.0 })               // keep holding past the 2s target
+        assertEquals(1, recorder.totalReps)
+        assertEquals(0, recorder.totalPartials)
+        assertEquals(EnginePhase.BOTTOM, recorder.last.phase)
+        assertEquals(1f, recorder.last.progress, 0.001f)
+        assertTrue(recorder.last.holdMs >= 2000L)
+    }
+
+    @Test
+    fun `breaking the hold early scores a partial`() {
+        val recorder = Recorder()
+        val engine = DynamicExerciseEngine(squatHoldSchema(targetMs = 5000L), recorder::onFrame)
+
+        var t = drive(engine, 0L, List(6) { 172.0 })          // READY
+        t = drive(engine, t, List(6) { 82.0 })                // hold begins
+        assertEquals(EnginePhase.BOTTOM, recorder.last.phase)
+
+        t = drive(engine, t, List(16) { 82.0 })               // a real attempt (~1.6s+)
+        t = drive(engine, t, List(8) { 172.0 })               // stand back up before the target
+        assertEquals(0, recorder.totalReps)
+        assertEquals(1, recorder.totalPartials)
+        assertEquals(EnginePhase.READY, recorder.last.phase)
+        assertEquals(0L, recorder.last.holdMs)
+    }
+
+    @Test
+    fun `a momentary wobble into the hold posture is ignored`() {
+        val recorder = Recorder()
+        val engine = DynamicExerciseEngine(squatHoldSchema(targetMs = 5000L), recorder::onFrame)
+
+        var t = drive(engine, 0L, List(6) { 172.0 })          // READY
+        t = drive(engine, t, List(6) { 82.0 })                // barely touches the hold posture
+        t = drive(engine, t, List(8) { 172.0 })               // and bails immediately
+        assertEquals(0, recorder.totalReps)
+        assertEquals(0, recorder.totalPartials)
+        assertEquals(EnginePhase.READY, recorder.last.phase)
+    }
+
+    @Test
+    fun `hold progress tracks elapsed time toward the target`() {
+        val recorder = Recorder()
+        val engine = DynamicExerciseEngine(squatHoldSchema(targetMs = 2000L), recorder::onFrame)
+
+        var t = drive(engine, 0L, List(6) { 172.0 })
+        t = drive(engine, t, List(6) { 82.0 })                // BOTTOM just entered
+        t = drive(engine, t, List(10) { 82.0 })               // ~1s into the hold
+        assertTrue(recorder.last.holdMs in 900L..1400L)
+        assertEquals(recorder.last.holdMs / 2000f, recorder.last.progress, 0.05f)
+    }
+
     @Test
     fun `angle constraints combine bounds`() {
         val window = AngleConstraint(min = 160.0, max = 180.0)

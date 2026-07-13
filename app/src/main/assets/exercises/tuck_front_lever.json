@@ -1,0 +1,27 @@
+{
+  "exercise_id": "tuck_front_lever",
+  "display_name": "Tuck Front Lever",
+  "target_muscles": ["latissimus_dorsi", "core", "lower_back"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"],
+    "hip_tuck": ["LEFT_SHOULDER", "LEFT_HIP", "LEFT_KNEE"],
+    "knee_tuck": ["LEFT_HIP", "LEFT_KNEE", "LEFT_ANKLE"],
+    "shoulder_lean": ["LEFT_ELBOW", "LEFT_SHOULDER", "LEFT_HIP"]
+  },
+  "states": {
+    "START": { "primary_angle": { "min": 150 } },
+    "INFLECTION_POINT": {
+      "primary_angle": { "min": 150 },
+      "hip_tuck": { "less_than": 110 },
+      "knee_tuck": { "less_than": 90 },
+      "shoulder_lean": { "less_than": 130 }
+    }
+  },
+  "hold": { "target_ms": 12000 },
+  "validation": {
+    "optimal_camera_plane": "SAGITTAL",
+    "required_joints_visible": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST", "LEFT_HIP", "LEFT_KNEE"]
+  },
+  "tempo": { "pulse_interval_ms": 1000 },
+  "mastery_reps": 1
+}

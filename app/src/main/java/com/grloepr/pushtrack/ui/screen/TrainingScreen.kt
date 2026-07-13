@@ -133,7 +133,11 @@ fun TrainingScreen(
     // Voice rep announcements + rep flash on the overlay
     LaunchedEffect(frame.repCount) {
         if (frame.repCount > 0) {
-            ttsManager.announceRepCount(frame.repCount)
+            if (schema.isHold) {
+                ttsManager.speak("Hold complete!")
+            } else {
+                ttsManager.announceRepCount(frame.repCount)
+            }
             repFlash.snapTo(1f)
             repFlash.animateTo(0f, animationSpec = tween(650))
         }
@@ -246,7 +250,11 @@ fun TrainingScreen(
                 .padding(top = 120.dp)
         ) {
             Text(
-                text = "Half rep — hit full depth for it to count",
+                text = if (schema.isHold) {
+                    "Hold broken — get back into position and hold it longer"
+                } else {
+                    "Half rep — hit full depth for it to count"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = SignalAmber,
@@ -290,13 +298,25 @@ fun TrainingScreen(
                         )
                     }
 
-                    RepCounterDial(
-                        repCount = frame.repCount,
-                        goalReps = node.masteryReps,
-                        progress = frame.progress
-                    )
+                    val holdTargetMs = schema.holdTargetMs
+                    if (holdTargetMs != null) {
+                        // For isometric skills the dial counts hold seconds, and
+                        // the ring fills as the hold approaches its target.
+                        RepCounterDial(
+                            repCount = (frame.holdMs / 1000L).toInt(),
+                            goalReps = (holdTargetMs / 1000L).toInt(),
+                            progress = frame.progress,
+                            unitLabel = "sec hold"
+                        )
+                    } else {
+                        RepCounterDial(
+                            repCount = frame.repCount,
+                            goalReps = node.masteryReps,
+                            progress = frame.progress
+                        )
+                    }
 
-                    StateMachineRibbon(phase = frame.phase)
+                    StateMachineRibbon(phase = frame.phase, isHold = schema.isHold)
                 }
             }
 
