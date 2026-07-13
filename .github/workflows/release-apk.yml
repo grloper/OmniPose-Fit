@@ -1,0 +1,87 @@
+name: Build & Release APK
+
+# Publishes installable OmniPose Fit APKs to the repo's Releases page.
+#   • Push a tag like `v1.0.0`  → builds + creates that release automatically.
+#   • Or run manually from the Actions tab (provide a tag).
+# Every run also uploads the APKs as workflow artifacts (Actions tab) so they
+# can be grabbed even without cutting a release.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.0.0)"
+        required: true
+        default: "v0.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;34.0.0"
+
+      - name: Build debug APKs (sideload-signed)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Stage & rename APKs
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk   dist/OmniPoseFit-arm64-v8a.apk
+          cp app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk dist/OmniPoseFit-armeabi-v7a.apk
+          cp app/build/outputs/apk/debug/app-x86_64-debug.apk      dist/OmniPoseFit-x86_64.apk
+          cp app/build/outputs/apk/debug/app-universal-debug.apk   dist/OmniPoseFit-universal.apk
+          ls -lh dist
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniPoseFit-APKs
+          path: dist/*.apk
+
+      - name: Resolve release tag
+        id: tag
+        run: echo "name=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: OmniPose Fit ${{ steps.tag.outputs.name }}
+          body: |
+            ### 📲 Install OmniPose Fit
+
+            Sideload build — pick the APK for your device:
+
+            | File | Use for |
+            | --- | --- |
+            | **OmniPoseFit-arm64-v8a.apk** | Virtually all modern phones (recommended) |
+            | OmniPoseFit-armeabi-v7a.apk | Older 32-bit devices |
+            | OmniPoseFit-universal.apk | Any architecture (larger download) |
+
+            On your phone: enable **Install unknown apps** for your browser/file
+            manager, open the downloaded APK, then grant the camera permission on
+            first launch. Everything runs on-device — no account or network needed.
+          files: dist/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
