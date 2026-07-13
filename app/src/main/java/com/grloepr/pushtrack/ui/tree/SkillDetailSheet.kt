@@ -31,13 +31,17 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grloepr.pushtrack.anatomy.InteractiveAnatomyPanel
+import com.grloepr.pushtrack.media.PreviewAssets
+import com.grloepr.pushtrack.ui.components.ExercisePreviewPlayer
 import com.grloepr.pushtrack.progression.CalisthenicsSkillGraph
 import com.grloepr.pushtrack.progression.SkillNode
 import com.grloepr.pushtrack.progression.SkillStatus
@@ -87,7 +91,15 @@ fun SkillDetailSheet(
             SheetHeader(node, status)
 
             Spacer(modifier = Modifier.height(18.dp))
-            VideoPlaceholder(title = node.title)
+            val context = LocalContext.current
+            val previewUri = remember(node.id) {
+                PreviewAssets.uriFor(context, node.id, node.schemaId)
+            }
+            if (previewUri != null) {
+                ExercisePreviewPlayer(assetUri = previewUri, title = node.title)
+            } else {
+                VideoPlaceholder(title = node.title)
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
             Text(

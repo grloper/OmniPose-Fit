@@ -50,7 +50,7 @@ Prebuilt APKs are published on the repo's
   Diamond Push-Up → Frog Stand → Handstand / Front Lever, plus pull, lever
   and leg branches) with three node states: locked (muted padlock),
   available (pulsing ring) and mastered (gold glow). Tapping a node opens a
-  preview modal with a technique-video placeholder, anatomy highlights and
+  preview modal with a looping technique-demo video, anatomy highlights and
   prerequisites. Hitting a skill's rep goal in AI training fires a mastery
   celebration and unlocks the next nodes.
 * **Live Training HUD** — schema-driven skeleton overlay with a live joint
@@ -112,6 +112,29 @@ Constraints support `min`, `max`, `less_than`, `greater_than` (AND-combined).
 The engine walks SEARCHING → READY → ECCENTRIC → BOTTOM → CONCENTRIC and
 counts a rep when the athlete returns to the `END` window after touching the
 inflection point; turnarounds before full depth are surfaced as partial reps.
+
+### Technique demo videos
+
+The skill detail sheet plays a looping, muted demo from
+`assets/previews/{skillNodeId}.mp4`, falling back to
+`{exerciseSchemaId}.mp4`, then to an animated placeholder — so adding footage
+for a movement is just dropping in a file.
+
+The committed clips are schema-exact rendered form demos (correct joint
+angles and tempo, generated deterministically). To replace them with
+photorealistic AI-athlete footage, use the bundled pipeline, which derives a
+movement-precise prompt from each exercise schema and renders it via the
+Hugging Face Inference Providers API:
+
+```bash
+pip install "huggingface_hub>=0.26" imageio-ffmpeg
+export HF_TOKEN=hf_...   # account with Inference Providers enabled
+python tools/generate_previews.py --seeds 4 --pingpong
+```
+
+Best-practice QC: play the generated clip on a monitor and point the app's
+camera at it — if the rep engine counts clean, full-depth reps, the form in
+the footage is provably consistent with what the tracker coaches.
 
 ## 📱 Cross-platform strategy
 
