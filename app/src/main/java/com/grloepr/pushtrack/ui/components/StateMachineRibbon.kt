@@ -34,23 +34,29 @@ import com.grloepr.pushtrack.ui.theme.VoltLime
 /**
  * Visualises the schema state machine as a vertical journey:
  * Start → Descent → Bottom → Ascent, with the live phase lit up.
+ * Hold schemas collapse it to Set → Holding.
  */
 @Composable
 fun StateMachineRibbon(
     phase: EnginePhase,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isHold: Boolean = false
 ) {
-    val steps = listOf(
-        EnginePhase.READY,
-        EnginePhase.ECCENTRIC,
-        EnginePhase.BOTTOM,
-        EnginePhase.CONCENTRIC
-    )
+    val steps = if (isHold) {
+        listOf(EnginePhase.READY, EnginePhase.BOTTOM)
+    } else {
+        listOf(
+            EnginePhase.READY,
+            EnginePhase.ECCENTRIC,
+            EnginePhase.BOTTOM,
+            EnginePhase.CONCENTRIC
+        )
+    }
 
     Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
         steps.forEachIndexed { index, step ->
             PhaseStep(
-                label = step.label,
+                label = if (isHold) holdLabel(step) else step.label,
                 color = stepColor(step),
                 isActive = phase == step,
                 isIdle = phase == EnginePhase.SEARCHING
@@ -66,6 +72,11 @@ fun StateMachineRibbon(
             }
         }
     }
+}
+
+private fun holdLabel(phase: EnginePhase): String = when (phase) {
+    EnginePhase.BOTTOM -> "Holding"
+    else -> "Set"
 }
 
 private fun stepColor(phase: EnginePhase): Color = when (phase) {

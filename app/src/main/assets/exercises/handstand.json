@@ -1,0 +1,30 @@
+{
+  "exercise_id": "handstand",
+  "display_name": "Handstand",
+  "target_muscles": ["deltoids", "trapezius", "core", "forearms"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"],
+    "shoulder_line": ["LEFT_ELBOW", "LEFT_SHOULDER", "LEFT_HIP"],
+    "body_line": ["LEFT_SHOULDER", "LEFT_HIP", "LEFT_KNEE"],
+    "leg_line": ["LEFT_HIP", "LEFT_KNEE", "LEFT_ANKLE"]
+  },
+  "states": {
+    "START": {
+      "primary_angle": { "min": 140 },
+      "shoulder_line": { "min": 120 }
+    },
+    "INFLECTION_POINT": {
+      "primary_angle": { "min": 155 },
+      "shoulder_line": { "min": 155 },
+      "body_line": { "min": 155 },
+      "leg_line": { "min": 150 }
+    }
+  },
+  "hold": { "target_ms": 15000 },
+  "validation": {
+    "optimal_camera_plane": "SAGITTAL",
+    "required_joints_visible": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST", "LEFT_HIP", "LEFT_KNEE", "LEFT_ANKLE"]
+  },
+  "tempo": { "pulse_interval_ms": 1000 },
+  "mastery_reps": 1
+}

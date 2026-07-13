@@ -27,6 +27,12 @@ import org.json.JSONObject
  *   "mastery_reps": 10
  * }
  * ```
+ *
+ * Isometric skills add a `hold` block; the INFLECTION_POINT state then describes
+ * the hold posture, and keeping it for `target_ms` counts as one rep:
+ * ```json
+ * "hold": { "target_ms": 20000 }
+ * ```
  */
 object SchemaParser {
 
@@ -103,7 +109,10 @@ object SchemaParser {
             requiredJointsVisible = requiredVisible,
             tempoPulseIntervalMs = json.optJSONObject("tempo")
                 ?.optLong("pulse_interval_ms", DEFAULT_TEMPO_MS) ?: DEFAULT_TEMPO_MS,
-            masteryReps = json.optInt("mastery_reps", DEFAULT_MASTERY_REPS)
+            masteryReps = json.optInt("mastery_reps", DEFAULT_MASTERY_REPS),
+            holdTargetMs = json.optJSONObject("hold")
+                ?.optLong("target_ms", 0L)
+                ?.takeIf { it > 0L }
         )
     }
 

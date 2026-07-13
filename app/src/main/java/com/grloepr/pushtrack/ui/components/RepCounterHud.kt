@@ -47,7 +47,8 @@ fun RepCounterDial(
     goalReps: Int,
     progress: Float,
     modifier: Modifier = Modifier,
-    dialSize: Dp = 132.dp
+    dialSize: Dp = 132.dp,
+    unitLabel: String = "reps"
 ) {
     val animatedProgress by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
@@ -114,7 +115,7 @@ fun RepCounterDial(
                 )
             }
             Text(
-                text = if (goalReps > 0) "of $goalReps reps" else "reps",
+                text = if (goalReps > 0) "of $goalReps $unitLabel" else unitLabel,
                 style = MaterialTheme.typography.labelMedium,
                 color = TextMuted
             )

@@ -1,0 +1,23 @@
+{
+  "exercise_id": "dead_hang",
+  "display_name": "Dead Hang",
+  "target_muscles": ["forearms", "latissimus_dorsi"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"],
+    "shoulder_opening": ["LEFT_ELBOW", "LEFT_SHOULDER", "LEFT_HIP"]
+  },
+  "states": {
+    "START": { "primary_angle": { "min": 145 } },
+    "INFLECTION_POINT": {
+      "primary_angle": { "min": 150 },
+      "shoulder_opening": { "min": 140 }
+    }
+  },
+  "hold": { "target_ms": 30000 },
+  "validation": {
+    "optimal_camera_plane": "FRONTAL",
+    "required_joints_visible": ["LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST", "LEFT_HIP"]
+  },
+  "tempo": { "pulse_interval_ms": 1000 },
+  "mastery_reps": 1
+}

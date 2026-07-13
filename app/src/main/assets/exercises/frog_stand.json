@@ -1,0 +1,25 @@
+{
+  "exercise_id": "frog_stand",
+  "display_name": "Frog Stand",
+  "target_muscles": ["forearms", "deltoids", "core"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"],
+    "knee_tuck": ["LEFT_HIP", "LEFT_KNEE", "LEFT_ANKLE"],
+    "hip_tuck": ["LEFT_SHOULDER", "LEFT_HIP", "LEFT_KNEE"]
+  },
+  "states": {
+    "START": { "primary_angle": { "max": 135 } },
+    "INFLECTION_POINT": {
+      "primary_angle": { "min": 40, "max": 115 },
+      "knee_tuck": { "less_than": 100 },
+      "hip_tuck": { "less_than": 90 }
+    }
+  },
+  "hold": { "target_ms": 20000 },
+  "validation": {
+    "optimal_camera_plane": "SAGITTAL",
+    "required_joints_visible": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST", "LEFT_HIP", "LEFT_KNEE"]
+  },
+  "tempo": { "pulse_interval_ms": 1000 },
+  "mastery_reps": 1
+}

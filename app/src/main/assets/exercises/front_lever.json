@@ -1,0 +1,27 @@
+{
+  "exercise_id": "front_lever",
+  "display_name": "Front Lever",
+  "target_muscles": ["latissimus_dorsi", "core", "lower_back", "glutes"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"],
+    "body_line": ["LEFT_SHOULDER", "LEFT_HIP", "LEFT_KNEE"],
+    "leg_line": ["LEFT_HIP", "LEFT_KNEE", "LEFT_ANKLE"],
+    "shoulder_lean": ["LEFT_ELBOW", "LEFT_SHOULDER", "LEFT_HIP"]
+  },
+  "states": {
+    "START": { "primary_angle": { "min": 150 } },
+    "INFLECTION_POINT": {
+      "primary_angle": { "min": 150 },
+      "body_line": { "min": 150 },
+      "leg_line": { "min": 150 },
+      "shoulder_lean": { "less_than": 120 }
+    }
+  },
+  "hold": { "target_ms": 8000 },
+  "validation": {
+    "optimal_camera_plane": "SAGITTAL",
+    "required_joints_visible": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST", "LEFT_HIP", "LEFT_KNEE", "LEFT_ANKLE"]
+  },
+  "tempo": { "pulse_interval_ms": 1000 },
+  "mastery_reps": 1
+}

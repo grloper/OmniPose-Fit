@@ -1,0 +1,28 @@
+{
+  "exercise_id": "wall_handstand",
+  "display_name": "Wall Handstand",
+  "target_muscles": ["deltoids", "trapezius", "core", "forearms"],
+  "tracking_joints": {
+    "primary_angle": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST"],
+    "shoulder_line": ["LEFT_ELBOW", "LEFT_SHOULDER", "LEFT_HIP"],
+    "body_line": ["LEFT_SHOULDER", "LEFT_HIP", "LEFT_KNEE"]
+  },
+  "states": {
+    "START": {
+      "primary_angle": { "min": 140 },
+      "shoulder_line": { "min": 120 }
+    },
+    "INFLECTION_POINT": {
+      "primary_angle": { "min": 150 },
+      "shoulder_line": { "min": 145 },
+      "body_line": { "min": 140 }
+    }
+  },
+  "hold": { "target_ms": 25000 },
+  "validation": {
+    "optimal_camera_plane": "SAGITTAL",
+    "required_joints_visible": ["LEFT_SHOULDER", "LEFT_ELBOW", "LEFT_WRIST", "LEFT_HIP", "LEFT_KNEE"]
+  },
+  "tempo": { "pulse_interval_ms": 1000 },
+  "mastery_reps": 1
+}
