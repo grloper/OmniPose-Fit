@@ -37,6 +37,17 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Per-ABI APK splits keep each download small (the ML Kit pose model bundles
+    // large native libraries). A universal APK is also produced as a fallback.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            isUniversalApk = true
+        }
+    }
 }
 
 dependencies {

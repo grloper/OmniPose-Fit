@@ -8,6 +8,28 @@ premium dark-mode experience with vibrant accent feedback.
 Built with **Kotlin**, **Jetpack Compose**, **CameraX** and **ML Kit Pose
 Detection**.
 
+<p align="center">
+  <img src="docs/omnipose-demo.gif" alt="OmniPose Fit UI preview: gamified skill tree and live training HUD" width="300"/>
+</p>
+
+<p align="center"><sub>UI preview — rendered from the app's real design system (palette, layouts and component behaviour). Not a device screen recording.</sub></p>
+
+## 📲 Install on your Android
+
+Prebuilt APKs are published on the repo's
+[**Releases**](../../releases) page (produced by the
+[`Build & Release APK`](.github/workflows/release-apk.yml) GitHub Action).
+
+1. Open the latest release and download **`OmniPoseFit-arm64-v8a.apk`**
+   (for virtually all modern phones) — or `OmniPoseFit-universal.apk` if
+   unsure of your device architecture.
+2. On your phone, allow *Install unknown apps* for your browser/file manager.
+3. Tap the downloaded APK to install, then grant the camera permission on
+   first launch.
+
+> Maintainers: push a tag like `v1.0.0` (or run the workflow manually from the
+> **Actions** tab) to build the APKs and attach them to a new GitHub Release.
+
 ## ✨ Key Features
 
 * **Dynamic Movement Parser** — no hardcoded routines. The tracking engine
