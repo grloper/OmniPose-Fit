@@ -66,6 +66,8 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.pose.detection)
     implementation(libs.mlkit.pose.detection.accurate)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

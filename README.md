@@ -50,7 +50,7 @@ Prebuilt APKs are published on the repo's
   Diamond Push-Up → Frog Stand → Handstand / Front Lever, plus pull, lever
   and leg branches) with three node states: locked (muted padlock),
   available (pulsing ring) and mastered (gold glow). Tapping a node opens a
-  preview modal with a technique-video placeholder, anatomy highlights and
+  preview modal with a looping technique-demo video, anatomy highlights and
   prerequisites. Hitting a skill's rep goal in AI training fires a mastery
   celebration and unlocks the next nodes.
 * **Live Training HUD** — schema-driven skeleton overlay with a live joint
@@ -112,6 +112,25 @@ Constraints support `min`, `max`, `less_than`, `greater_than` (AND-combined).
 The engine walks SEARCHING → READY → ECCENTRIC → BOTTOM → CONCENTRIC and
 counts a rep when the athlete returns to the `END` window after touching the
 inflection point; turnarounds before full depth are surfaced as partial reps.
+
+### Technique demo videos
+
+The skill detail sheet plays a looping, muted demo from
+`app/src/main/assets/previews/{skillNodeId}.mp4`, falling back to
+`{exerciseSchemaId}.mp4`, then to an animated placeholder.
+
+Demo clips are plain assets — generate them however you like (Veo/Gemini,
+Runway, a self-hosted model, or real footage), then drop the MP4 into that
+folder and rebuild. No code change: the player auto-detects any file it finds.
+
+Naming: files are matched to skill ids from `progression/SkillGraph.kt`
+(`deep_squat.mp4`, `pullup.mp4`, `handstand.mp4`, `front_lever.mp4`, …).
+Keep clips short, **16:9**, and loopable. Normalise for a small APK with:
+
+```bash
+ffmpeg -i in.mp4 -vf scale=640:-2 -an -c:v libx264 -pix_fmt yuv420p \
+  -movflags +faststart app/src/main/assets/previews/deep_squat.mp4
+```
 
 ## 📱 Cross-platform strategy
 
