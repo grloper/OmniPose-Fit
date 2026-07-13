@@ -116,25 +116,21 @@ inflection point; turnarounds before full depth are surfaced as partial reps.
 ### Technique demo videos
 
 The skill detail sheet plays a looping, muted demo from
-`assets/previews/{skillNodeId}.mp4`, falling back to
-`{exerciseSchemaId}.mp4`, then to an animated placeholder — so adding footage
-for a movement is just dropping in a file.
+`app/src/main/assets/previews/{skillNodeId}.mp4`, falling back to
+`{exerciseSchemaId}.mp4`, then to an animated placeholder.
 
-The committed clips are schema-exact rendered form demos (correct joint
-angles and tempo, generated deterministically). To replace them with
-photorealistic AI-athlete footage, use the bundled pipeline, which derives a
-movement-precise prompt from each exercise schema and renders it via the
-Hugging Face Inference Providers API:
+Demo clips are plain assets — generate them however you like (Veo/Gemini,
+Runway, a self-hosted model, or real footage), then drop the MP4 into that
+folder and rebuild. No code change: the player auto-detects any file it finds.
+
+Naming: files are matched to skill ids from `progression/SkillGraph.kt`
+(`deep_squat.mp4`, `pullup.mp4`, `handstand.mp4`, `front_lever.mp4`, …).
+Keep clips short, **16:9**, and loopable. Normalise for a small APK with:
 
 ```bash
-pip install "huggingface_hub>=0.26" imageio-ffmpeg
-export HF_TOKEN=hf_...   # account with Inference Providers enabled
-python tools/generate_previews.py --seeds 4 --pingpong
+ffmpeg -i in.mp4 -vf scale=640:-2 -an -c:v libx264 -pix_fmt yuv420p \
+  -movflags +faststart app/src/main/assets/previews/deep_squat.mp4
 ```
-
-Best-practice QC: play the generated clip on a monitor and point the app's
-camera at it — if the rep engine counts clean, full-depth reps, the form in
-the footage is provably consistent with what the tracker coaches.
 
 ## 📱 Cross-platform strategy
 
