@@ -238,8 +238,13 @@ object CalisthenicsSkillGraph {
 
     fun byId(id: String): SkillNode? = nodesById[id]
 
-    fun statusOf(node: SkillNode, mastered: Set<String>): SkillStatus = when {
+    fun statusOf(
+        node: SkillNode,
+        mastered: Set<String>,
+        unlocked: Set<String> = emptySet()
+    ): SkillStatus = when {
         node.id in mastered -> SkillStatus.MASTERED
+        node.id in unlocked -> SkillStatus.AVAILABLE
         node.prerequisites.all { it in mastered } -> SkillStatus.AVAILABLE
         else -> SkillStatus.LOCKED
     }

@@ -148,7 +148,8 @@ fun SkillTreeScreen(
             onStartTraining = {
                 inspectedNode = null
                 onStartTraining(node)
-            }
+            },
+            onSkipUnlock = { treeState.unlock(node.id) }
         )
     }
 }

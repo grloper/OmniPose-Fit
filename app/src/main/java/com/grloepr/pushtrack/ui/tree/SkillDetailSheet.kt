@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.BottomSheetDefaults
@@ -28,6 +29,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -71,7 +73,8 @@ fun SkillDetailSheet(
     status: SkillStatus,
     masteredIds: Set<String>,
     onDismiss: () -> Unit,
-    onStartTraining: () -> Unit
+    onStartTraining: () -> Unit,
+    onSkipUnlock: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -123,7 +126,7 @@ fun SkillDetailSheet(
             PrerequisiteChips(node, masteredIds)
 
             Spacer(modifier = Modifier.height(22.dp))
-            CallToAction(node, status, onStartTraining)
+            CallToAction(node, status, onStartTraining, onSkipUnlock)
         }
     }
 }
@@ -283,25 +286,43 @@ private fun PrereqChip(prereq: SkillNode, isMastered: Boolean) {
 private fun CallToAction(
     node: SkillNode,
     status: SkillStatus,
-    onStartTraining: () -> Unit
+    onStartTraining: () -> Unit,
+    onSkipUnlock: () -> Unit
 ) {
     val trackable = node.schemaId != null
 
     when {
         status == SkillStatus.LOCKED -> {
-            Button(
-                onClick = {},
-                enabled = false,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    disabledContainerColor = SurfaceHigh,
-                    disabledContentColor = TextFaint
-                )
-            ) {
-                Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Master the requirements to unlock", modifier = Modifier.padding(vertical = 6.dp))
+            Column {
+                Button(
+                    onClick = {},
+                    enabled = false,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        disabledContainerColor = SurfaceHigh,
+                        disabledContentColor = TextFaint
+                    )
+                ) {
+                    Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Master the requirements to unlock", modifier = Modifier.padding(vertical = 6.dp))
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = onSkipUnlock,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ElectricCyan)
+                ) {
+                    Icon(Icons.Rounded.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Skip requirements & unlock",
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
+                }
             }
         }
 

@@ -23,14 +23,28 @@ class SkillTreeState(private val prefs: SharedPreferences) {
     )
         private set
 
+    /** Skills force-unlocked via "skip" without mastering their prerequisites. */
+    var unlocked: Set<String> by mutableStateOf(
+        prefs.getStringSet(KEY_UNLOCKED, emptySet()).orEmpty().toSet()
+    )
+        private set
+
     fun isMastered(id: String): Boolean = id in mastered
 
-    fun statusOf(node: SkillNode): SkillStatus = CalisthenicsSkillGraph.statusOf(node, mastered)
+    fun statusOf(node: SkillNode): SkillStatus =
+        CalisthenicsSkillGraph.statusOf(node, mastered, unlocked)
 
     fun master(id: String) {
         if (id in mastered) return
         mastered = mastered + id
         prefs.edit().putStringSet(KEY_MASTERED, mastered).apply()
+    }
+
+    /** Skip the prerequisite chain and make a locked skill playable right away. */
+    fun unlock(id: String) {
+        if (id in unlocked || id in mastered) return
+        unlocked = unlocked + id
+        prefs.edit().putStringSet(KEY_UNLOCKED, unlocked).apply()
     }
 
     val masteredCount: Int get() = mastered.size
@@ -52,6 +66,7 @@ class SkillTreeState(private val prefs: SharedPreferences) {
 
     companion object {
         private const val KEY_MASTERED = "mastered_skills"
+        private const val KEY_UNLOCKED = "unlocked_skills"
         private const val PREFS_NAME = "omnipose_progression"
         const val XP_PER_LEVEL = 300
 
