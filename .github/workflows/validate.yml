@@ -8,7 +8,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -19,10 +19,24 @@ jobs:
         run: |
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          # Keep the same Android home for both Gradle builds and the emulator.
+          # Moving it after APK assembly regenerates a different debug signer.
+          {
+            echo "ANDROID_SDK_HOME=$RUNNER_TEMP/omnipose-sdk-user"
+            echo "ANDROID_USER_HOME=$RUNNER_TEMP/omnipose-sdk-user/.android"
+            echo "ANDROID_EMULATOR_HOME=$RUNNER_TEMP/omnipose-sdk-user/.android"
+            echo "ANDROID_AVD_HOME=$RUNNER_TEMP/omnipose-sdk-user/.android/avd"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/omnipose-sdk-user/.android/avd"
+      - name: Install emulator runtime library
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libpulse0
       - name: Install build and emulator packages
         run: sdkmanager "platforms;android-36" "build-tools;34.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
       - name: Test, lint and build development APKs
         run: |
+          python3 scripts/test_ci_android_smoke.py
           chmod +x gradlew
           ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest bundleRelease --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
       - name: Enable runner virtualization
@@ -31,38 +45,8 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Synthetic emulator launch smoke
-        timeout-minutes: 10
-        run: |
-          mkdir -p evidence
-          cleanup() {
-            adb logcat -d > evidence/logcat.txt || true
-            adb pull /sdcard/journey.mp4 evidence/journey.mp4 || true
-            adb emu kill || true
-          }
-          trap cleanup EXIT
-          echo no | avdmanager create avd -n omnipose-ci -k "system-images;android-35;google_apis;x86_64" --force
-          "$ANDROID_HOME/emulator/emulator" -avd omnipose-ci -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -camera-back emulated -camera-front emulated > evidence/emulator.log 2>&1 &
-          booted=false
-          for i in $(seq 1 90); do
-            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]; then booted=true; break; fi
-            sleep 2
-          done
-          [ "$booted" = true ]
-          adb install app/build/outputs/apk/debug/app-universal-debug.apk
-          adb logcat -c
-          adb shell screenrecord --time-limit 60 /sdcard/journey.mp4 > evidence/screenrecord.log 2>&1 &
-          recorder=$!
-          ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
-          wait "$recorder"
-          adb shell am start -W -n com.grloepr.pushtrack/.MainActivity | tee evidence/launch.txt
-          sleep 8
-          adb shell pidof com.grloepr.pushtrack > evidence/pid.txt
-          adb shell uiautomator dump /sdcard/window.xml
-          adb pull /sdcard/window.xml evidence/window.xml
-          adb shell screencap -p /sdcard/screen.png
-          adb pull /sdcard/screen.png evidence/screen.png
-          adb logcat -d > evidence/logcat.txt
-          ! grep -q 'FATAL EXCEPTION' evidence/logcat.txt
+        timeout-minutes: 15
+        run: bash scripts/ci_android_smoke.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -70,7 +54,10 @@ jobs:
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/bundle/release/*.aab
+            app/build/test-results/
+            app/build/outputs/androidTest-results/
             app/build/reports/tests/
             app/build/reports/androidTests/
             app/build/reports/lint-results-debug.*
             evidence/
+
