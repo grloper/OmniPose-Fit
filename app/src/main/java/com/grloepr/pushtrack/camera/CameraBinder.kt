@@ -9,7 +9,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
-import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -40,8 +39,8 @@ fun bindCameraPreview(
     previewView: PreviewView,
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
     cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-) {
-    bindCamera(
+): AutoCloseable {
+    return bindCamera(
         cameraProvider = cameraProvider,
         previewView = previewView,
         lifecycleOwner = lifecycleOwner,
@@ -56,8 +55,8 @@ fun bindCameraWithAnalysis(
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
     imageAnalyzer: ImageAnalysis.Analyzer,
     cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-) {
-    bindCamera(
+): AutoCloseable {
+    return bindCamera(
         cameraProvider = cameraProvider,
         previewView = previewView,
         lifecycleOwner = lifecycleOwner,
@@ -72,9 +71,10 @@ private fun bindCamera(
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
     imageAnalyzer: ImageAnalysis.Analyzer?,
     cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-) {
-    // Unbind any existing camera use cases before rebinding
-    cameraProvider.unbindAll()
+): AutoCloseable {
+    // The caller owns only these use cases and their executor.
+    // Never tear down another screen's camera bindings.
+    val analysisExecutor = imageAnalyzer?.let { Executors.newSingleThreadExecutor() }
     
     // Create preview use case
     val preview = Preview.Builder().build().also {
@@ -88,21 +88,26 @@ private fun bindCamera(
             .build()
             .also { analysis ->
                 // Use background executor for analysis
-                val analysisExecutor = Executors.newSingleThreadExecutor()
-                analysis.setAnalyzer(analysisExecutor, it)
+                analysis.setAnalyzer(requireNotNull(analysisExecutor), it)
             }
     }
     
+    val useCases = listOfNotNull(preview, imageAnalysis)
     try {
-        // Bind use cases to camera
-        val useCases = listOfNotNull(preview, imageAnalysis)
+        // Bind once for this screen/camera configuration.
         cameraProvider.bindToLifecycle(
             lifecycleOwner,
             cameraSelector,
             *useCases.toTypedArray()
         )
     } catch (exc: Exception) {
-        // Handle any errors (e.g., camera not available)
-        exc.printStackTrace()
+        imageAnalysis?.clearAnalyzer()
+        analysisExecutor?.shutdown()
+        throw exc
+    }
+    return AutoCloseable {
+        imageAnalysis?.clearAnalyzer()
+        cameraProvider.unbind(*useCases.toTypedArray())
+        analysisExecutor?.shutdown()
     }
 }

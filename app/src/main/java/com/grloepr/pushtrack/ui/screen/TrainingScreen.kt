@@ -50,6 +50,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -106,6 +108,10 @@ fun TrainingScreen(
 
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_FRONT_CAMERA) }
     var soundOn by remember { mutableStateOf(true) }
+    var cameraError by remember { mutableStateOf(false) }
+    val previewView = remember(context) {
+        PreviewView(context).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
+    }
 
     val ttsManager = remember { TextToSpeechManager(context) }
     val tickPlayer = remember { TempoTickPlayer() }
@@ -146,6 +152,23 @@ fun TrainingScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Bind only when camera configuration changes, not on every pose recomposition.
+    DisposableEffect(cameraProvider, previewView, lifecycleOwner, imageAnalyzer, cameraSelector) {
+        cameraError = false
+        val binding = cameraProvider?.let { provider ->
+            try {
+                bindCameraWithAnalysis(provider, previewView, lifecycleOwner, imageAnalyzer, cameraSelector)
+            } catch (_: Exception) {
+                cameraError = true
+                null
+            }
+        }
+        onDispose {
+            imageAnalyzer.invalidate()
+            binding?.close()
+        }
     }
 
     // Voice rep announcements + rep flash on the overlay
@@ -202,22 +225,9 @@ fun TrainingScreen(
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // Camera feed
         AndroidView(
-            factory = { viewContext ->
-                PreviewView(viewContext).apply {
-                    scaleType = PreviewView.ScaleType.FIT_CENTER
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-            update = { previewView ->
-                cameraProvider?.let { provider ->
-                    bindCameraWithAnalysis(
-                        cameraProvider = provider,
-                        previewView = previewView,
-                        lifecycleOwner = lifecycleOwner,
-                        imageAnalyzer = imageAnalyzer,
-                        cameraSelector = cameraSelector
-                    )
-                }
+            factory = { previewView },
+            modifier = Modifier.fillMaxSize().testTag("camera-preview").semantics {
+                stateDescription = if (poseResult != null) "Pose analysis active" else "Waiting for pose analysis"
             }
         )
 
@@ -265,7 +275,11 @@ fun TrainingScreen(
                 modifier = Modifier.background(Color.Black.copy(alpha = 0.7f)).padding(8.dp)
             )
             Spacer(modifier = Modifier.height(10.dp))
-            CameraAngleBanner(alignment = frame.alignment)
+            if (cameraError) {
+                Text("Camera unavailable. Try switching camera or end this session.", color = SignalAmber)
+            } else {
+                CameraAngleBanner(alignment = frame.alignment)
+            }
             Text(
                 text = "Completed: ${frame.repCount}",
                 color = Color.White,
