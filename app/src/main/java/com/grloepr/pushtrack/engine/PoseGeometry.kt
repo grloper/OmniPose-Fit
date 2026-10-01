@@ -9,7 +9,7 @@ import kotlin.math.hypot
 const val DEFAULT_MIN_JOINT_CONFIDENCE = 0.45f
 
 fun JointPoint?.isConfident(minConfidence: Float = DEFAULT_MIN_JOINT_CONFIDENCE): Boolean =
-    this != null && confidence >= minConfidence
+    this != null && x.isFinite() && y.isFinite() && confidence.isFinite() && confidence >= minConfidence
 
 fun midpoint(a: JointPoint, b: JointPoint): Pair<Float, Float> =
     Pair((a.x + b.x) / 2f, (a.y + b.y) / 2f)
@@ -31,6 +31,8 @@ fun calculateAngle(
         return null
     }
     a!!; b!!; c!!
+
+    if (a.x == b.x && a.y == b.y || c.x == b.x && c.y == b.y) return null
 
     val ab = atan2(a.y - b.y, a.x - b.x)
     val cb = atan2(c.y - b.y, c.x - b.x)

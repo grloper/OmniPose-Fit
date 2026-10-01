@@ -290,6 +290,19 @@ private fun CallToAction(
     onSkipUnlock: () -> Unit
 ) {
     val trackable = node.schemaId != null
+    if (trackable) {
+        Text(
+            text = if (node.id == node.schemaId) {
+                "Camera estimates joint motion. Session targets do not certify form or athletic mastery."
+            } else {
+                "Uses generic ${node.schemaId} tracking. This variant is not verified and cannot unlock mastery automatically."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = TextMuted,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+    }
+
 
     when {
         status == SkillStatus.LOCKED -> {
@@ -339,7 +352,7 @@ private fun CallToAction(
                 Icon(Icons.Rounded.PlayArrow, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (status == SkillStatus.MASTERED) "Train again" else "Start AI training",
+                    text = if (status == SkillStatus.MASTERED) "Train again" else "Start motion tracking",
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(vertical = 6.dp)
                 )
