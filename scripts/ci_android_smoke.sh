@@ -15,9 +15,47 @@ ADB="$ANDROID_HOME/platform-tools/adb"
 AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
 EMULATOR="$ANDROID_HOME/emulator/emulator"
 AVD_NAME=omnipose-ci
-SYSTEM_IMAGE='system-images;android-35;google_apis;x86_64'
+SYSTEM_IMAGE="${SYSTEM_IMAGE:-system-images;android-35;google_apis;x86_64}"
 emulator_pid=
 recorder_pid=
+installed_recorded=false
+
+record_installed_apks() {
+  local line path index=0
+  mkdir -p evidence/installed-apks
+  timeout --kill-after=5s 10 "$ADB" shell pm path com.grloepr.pushtrack > evidence/installed-package-paths.txt || return 1
+  while IFS= read -r line; do
+    path="${line#package:}"
+    path="${path%$'\r'}"
+    [ "$path" != "$line" ] || return 1
+    timeout --kill-after=5s 30 "$ADB" pull "$path" "evidence/installed-apks/$index.apk" || return 1
+    index=$((index + 1))
+  done < evidence/installed-package-paths.txt
+  [ "$index" -gt 0 ] || return 1
+  sha256sum evidence/installed-apks/*.apk > evidence/installed-apk-sha256.txt || return 1
+  python3 - <<'PYCODE' || return 1
+import hashlib, json, zipfile
+from pathlib import Path
+def hashes(paths):
+    result = {}
+    for path in paths:
+        with zipfile.ZipFile(path) as archive:
+            for name in archive.namelist():
+                if '/x86_64/' in name and name.endswith('.so'):
+                    key = name.rsplit('/', 1)[-1]
+                    if key in result:
+                        raise ValueError('duplicate installed native library: ' + key)
+                    result[key] = hashlib.sha256(archive.read(name)).hexdigest()
+    return result
+release = hashes([Path('app/build/outputs/bundle/release/app-release.aab')])
+installed = hashes(sorted(Path('evidence/installed-apks').glob('*.apk')))
+passed = bool(release) and release == installed
+Path('evidence/installed-release-native-parity.json').write_text(json.dumps(
+    {'abi': 'x86_64', 'release': release, 'installed': installed, 'passed': passed}, indent=2))
+assert passed, 'Actually installed native bytes do not match release AAB'
+PYCODE
+  installed_recorded=true
+}
 
 cleanup() {
   local status=$?
@@ -26,6 +64,9 @@ cleanup() {
   # Missing/offline devices must not make failure diagnostics hang indefinitely.
   timeout --kill-after=5s 5 "$ADB" devices -l > evidence/adb-devices.txt 2>&1
   if timeout --kill-after=5s 5 "$ADB" get-state 2>/dev/null | grep -qx device; then
+    if [ "${EXPECTED_PAGE_SIZE:-}" = 16384 ] && [ "$installed_recorded" != true ]; then
+      record_installed_apks > evidence/installed-identity.log 2>&1
+    fi
     timeout --kill-after=5s 15 "$ADB" logcat -d > evidence/logcat.txt 2>&1
     timeout --kill-after=5s 15 "$ADB" pull /sdcard/journey.mp4 evidence/journey.mp4 > evidence/video-pull.txt 2>&1
     timeout --kill-after=5s 10 "$ADB" emu kill > evidence/emulator-stop.txt 2>&1
@@ -93,6 +134,20 @@ if [ "$booted" != true ]; then
 fi
 timeout --kill-after=5s 10 "$ADB" shell getprop > evidence/device-properties.txt
 timeout --kill-after=5s 10 "$ADB" shell getconf PAGE_SIZE > evidence/page-size.txt
+if [ -n "${EXPECTED_PAGE_SIZE:-}" ] && [ "$(tr -d '\r\n' < evidence/page-size.txt)" != "$EXPECTED_PAGE_SIZE" ]; then
+  echo "Expected PAGE_SIZE=$EXPECTED_PAGE_SIZE, got $(cat evidence/page-size.txt)" >&2
+  exit 1
+fi
+if [ "${EXPECTED_PAGE_SIZE:-}" = 16384 ]; then
+  # Disposable CI emulator only. A compat-mode success must not look like native support.
+  timeout --kill-after=5s 10 "$ADB" shell setprop bionic.linker.16kb.app_compat.enabled false
+  timeout --kill-after=5s 10 "$ADB" shell setprop pm.16kb.app_compat.disabled true
+  timeout --kill-after=5s 10 "$ADB" shell getprop bionic.linker.16kb.app_compat.enabled > evidence/linker-compat.txt
+  timeout --kill-after=5s 10 "$ADB" shell getprop pm.16kb.app_compat.disabled > evidence/package-compat.txt
+  grep -qx 'false' <(tr -d '\r' < evidence/linker-compat.txt)
+  grep -qx 'true' <(tr -d '\r' < evidence/package-compat.txt)
+fi
+sha256sum app/build/outputs/apk/debug/app-universal-debug.apk > evidence/preinstalled-universal-apk-sha256.txt
 timeout --kill-after=5s 120 "$ADB" install app/build/outputs/apk/debug/app-universal-debug.apk | tee evidence/install.txt
 timeout --kill-after=5s 10 "$ADB" logcat -c
 timeout --kill-after=5s 75 "$ADB" shell screenrecord --time-limit 60 /sdcard/journey.mp4 > evidence/screenrecord.log 2>&1 &
@@ -105,6 +160,10 @@ recorder_pid=$!
 timeout --kill-after=5s 360 ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
   -Pkotlin.compiler.execution.strategy=in-process \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true | tee evidence/instrumentation.txt
+if [ "${EXPECTED_PAGE_SIZE:-}" = 16384 ]; then
+  # Gradle may install an ABI split. Capture actual on-device bytes after the test.
+  record_installed_apks > evidence/installed-identity.log 2>&1
+fi
 wait "$recorder_pid"
 recorder_pid=
 timeout --kill-after=5s 30 "$ADB" shell am start -W -n com.grloepr.pushtrack/.MainActivity | tee evidence/launch.txt

@@ -11,6 +11,7 @@ No ads or billing are integrated. Do not choose a permanent free listing or prom
 
 - Run unit, lint, instrumentation and packaged-app checks at the exact candidate commit. Camera binding must remain stable across pose-driven recomposition and its executor must be released on camera switch/exit.
 - Qualify real human pose behavior on an approved test device: front/back cameras, rotation/mirroring, occlusion, tempo, background/resume, permission denial/revocation, low-end latency, large font and TalkBack. Synthetic landmarks and an empty emulated-camera result do not prove exercise recognition accuracy.
+- The current vendor binaries fail the official RELRO static formula; see [native 16 KB readiness](NATIVE_16KB_READINESS.md) for exact hashes, per-ABI results and the distinct runtime gate. Do not describe native compatibility as fixed.
 - Verify all 64-bit native dependencies with ELF LOAD/RELRO checks, APK zip alignment and a 16 KB device run. Read [current Android guidance](https://developer.android.com/guide/practices/page-sizes); do not infer compliance from target SDK alone.
 - Verify bundled preview provenance. Generated previews are illustrations and must not be listed as live tracking results or proven technique demonstrations.
 - Publish the reviewed [privacy draft](PRIVACY_POLICY_DRAFT.md) with an owner-approved contact and public URL, provide it in app, and reconcile ML Kit performance/utilization metrics with Data safety. The merged manifest includes INTERNET even though the app's source manifest does not.

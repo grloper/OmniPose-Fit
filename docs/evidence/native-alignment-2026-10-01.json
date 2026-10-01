@@ -1,0 +1,884 @@
+{
+  "checked_utc": "2026-10-01",
+  "source_commit": "ff77c09cac8af108fbc93964acbe94c266901689",
+  "source_run": "https://github.com/grloper/OmniPose-Fit/actions/runs/36910983766",
+  "interpretation": "Official static formula failure is distinct from runtime failure. No trailing writable LOAD overlap was found in the baseline; device execution is still required.",
+  "baseline": {
+    "archive": "app-release.aab",
+    "archive_sha256": "33eef4ecd8935dbdc702b3fb6b30877b6a77edafaf22a765a5cd67377b3a3e43",
+    "source": "https://developer.android.com/guide/practices/page-sizes",
+    "formula": "(GNU_RELRO.p_vaddr + GNU_RELRO.p_memsz) % 16384 == 0",
+    "scope": "ELF static audit only; APK ZIP alignment and device runtime are separate gates",
+    "abis": [
+      "arm64-v8a",
+      "armeabi-v7a",
+      "x86",
+      "x86_64"
+    ],
+    "errors": [],
+    "libraries": [
+      {
+        "path": "base/lib/arm64-v8a/libandroidx.graphics.path.so",
+        "abi": "arm64-v8a",
+        "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+        "elf_class": 64,
+        "machine": 183,
+        "static_16kb_checked": true,
+        "relro": [
+          {
+            "vaddr": 23616,
+            "memsz": 960,
+            "end_mod_16384": 8192,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [
+          "GNU_RELRO end is not divisible by 16384 (official static formula)"
+        ],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/arm64-v8a/libimage_processing_util_jni.so",
+        "abi": "arm64-v8a",
+        "sha256": "3e0071afcdc7e321f839e196d266014182f18d0988e4455acc9857a085b2184e",
+        "elf_class": 64,
+        "machine": 183,
+        "static_16kb_checked": true,
+        "relro": [
+          {
+            "vaddr": 42432,
+            "memsz": 2624,
+            "end_mod_16384": 12288,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [
+          "GNU_RELRO end is not divisible by 16384 (official static formula)"
+        ],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/arm64-v8a/libsurface_util_jni.so",
+        "abi": "arm64-v8a",
+        "sha256": "ee3f0d56f81cc0a301db32dc4fd51274c3216733b4c40172768e38bc5049a265",
+        "elf_class": 64,
+        "machine": 183,
+        "static_16kb_checked": true,
+        "relro": [
+          {
+            "vaddr": 18832,
+            "memsz": 1648,
+            "end_mod_16384": 4096,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [
+          "GNU_RELRO end is not divisible by 16384 (official static formula)"
+        ],
+        "load_alignments": [
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/arm64-v8a/libxeno_native.so",
+        "abi": "arm64-v8a",
+        "sha256": "a711a0294befbb258110ca03713a0c8b2f8d4b57910796c35489478f5df8b663",
+        "elf_class": 64,
+        "machine": 183,
+        "static_16kb_checked": true,
+        "relro": [
+          {
+            "vaddr": 9912320,
+            "memsz": 278528,
+            "end_mod_16384": 0,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/armeabi-v7a/libandroidx.graphics.path.so",
+        "abi": "armeabi-v7a",
+        "sha256": "41399eba6fc2a60f6f14642375c1824f3cf25eb8fec7397d753730a3ceda3e2b",
+        "elf_class": 32,
+        "machine": 40,
+        "static_16kb_checked": false,
+        "relro": [
+          {
+            "vaddr": 21696,
+            "memsz": 2880,
+            "end_mod_16384": 8192,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/armeabi-v7a/libimage_processing_util_jni.so",
+        "abi": "armeabi-v7a",
+        "sha256": "e48e356bbe1902ae9a66178a4a0141c993b82ee9f70dde52ad83e4af3eca984f",
+        "elf_class": 32,
+        "machine": 40,
+        "static_16kb_checked": false,
+        "relro": [
+          {
+            "vaddr": 34736,
+            "memsz": 2128,
+            "end_mod_16384": 4096,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/armeabi-v7a/libsurface_util_jni.so",
+        "abi": "armeabi-v7a",
+        "sha256": "f110d6a305fef5be5664d58cfb054366b002bc516066b4ec880c38a68428756f",
+        "elf_class": 32,
+        "machine": 40,
+        "static_16kb_checked": false,
+        "relro": [
+          {
+            "vaddr": 18144,
+            "memsz": 2336,
+            "end_mod_16384": 4096,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/armeabi-v7a/libxeno_native.so",
+        "abi": "armeabi-v7a",
+        "sha256": "8ad3492a12850cca112498ea99273e3b5144e5fcefa7d48296cc898aa319aec5",
+        "elf_class": 32,
+        "machine": 40,
+        "static_16kb_checked": false,
+        "relro": [
+          {
+            "vaddr": 6496256,
+            "memsz": 147456,
+            "end_mod_16384": 8192,
+            "trailing_page_writable_load_overlap": true
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          4096,
+          4096,
+          4096
+        ]
+      },
+      {
+        "path": "base/lib/x86/libandroidx.graphics.path.so",
+        "abi": "x86",
+        "sha256": "eb0570b41fd3bff25d8204a967c03bd7550719e768b791f680cc40cbe35f29af",
+        "elf_class": 32,
+        "machine": 3,
+        "static_16kb_checked": false,
+        "relro": [
+          {
+            "vaddr": 23840,
+            "memsz": 736,
+            "end_mod_16384": 8192,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/x86/libimage_processing_util_jni.so",
+        "abi": "x86",
+        "sha256": "f5bdd537631cce21ad038a6737775540a7aef1f5a3d1fdc26c469f6c1ae73010",
+        "elf_class": 32,
+        "machine": 3,
+        "static_16kb_checked": false,
+        "relro": [
+          {
+            "vaddr": 52736,
+            "memsz": 4608,
+            "end_mod_16384": 8192,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/x86/libsurface_util_jni.so",
+        "abi": "x86",
+        "sha256": "6b5d033063bc125d99706f14f0ded08b3f0058f53f5a3d17d134e7d2ea75db11",
+        "elf_class": 32,
+        "machine": 3,
+        "static_16kb_checked": false,
+        "relro": [
+          {
+            "vaddr": 18528,
+            "memsz": 1952,
+            "end_mod_16384": 4096,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/x86/libxeno_native.so",
+        "abi": "x86",
+        "sha256": "c5e5e8424484fd4e6c93d8d93aa15744470f71b470dc82beaa738f551eecab25",
+        "elf_class": 32,
+        "machine": 3,
+        "static_16kb_checked": false,
+        "relro": [
+          {
+            "vaddr": 11771904,
+            "memsz": 143360,
+            "end_mod_16384": 4096,
+            "trailing_page_writable_load_overlap": true
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          4096,
+          4096,
+          4096
+        ]
+      },
+      {
+        "path": "base/lib/x86_64/libandroidx.graphics.path.so",
+        "abi": "x86_64",
+        "sha256": "4e56c996f13670e70082658de7880c4020eabf4f25e43387f88ed78a713fc9f0",
+        "elf_class": 64,
+        "machine": 62,
+        "static_16kb_checked": true,
+        "relro": [
+          {
+            "vaddr": 24256,
+            "memsz": 4416,
+            "end_mod_16384": 12288,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [
+          "GNU_RELRO end is not divisible by 16384 (official static formula)"
+        ],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/x86_64/libimage_processing_util_jni.so",
+        "abi": "x86_64",
+        "sha256": "676e3e280c10dcb9b71ef5bb727552610dc73c7ec85af54c7c898f82785c33d7",
+        "elf_class": 64,
+        "machine": 62,
+        "static_16kb_checked": true,
+        "relro": [
+          {
+            "vaddr": 61776,
+            "memsz": 3760,
+            "end_mod_16384": 0,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/x86_64/libsurface_util_jni.so",
+        "abi": "x86_64",
+        "sha256": "cd425e10a365fb3695e53f1e46227d44d89f14854da4f1258ef079c80c752339",
+        "elf_class": 64,
+        "machine": 62,
+        "static_16kb_checked": true,
+        "relro": [
+          {
+            "vaddr": 18928,
+            "memsz": 1552,
+            "end_mod_16384": 4096,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [
+          "GNU_RELRO end is not divisible by 16384 (official static formula)"
+        ],
+        "load_alignments": [
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/x86_64/libxeno_native.so",
+        "abi": "x86_64",
+        "sha256": "2aeb8dcecf65cb7ab7baad776db00b174ab62e61dd47a2a76b9e394a148c2747",
+        "elf_class": 64,
+        "machine": 62,
+        "static_16kb_checked": true,
+        "relro": [
+          {
+            "vaddr": 11124736,
+            "memsz": 241664,
+            "end_mod_16384": 12288,
+            "trailing_page_writable_load_overlap": false
+          }
+        ],
+        "failures": [
+          "GNU_RELRO end is not divisible by 16384 (official static formula)"
+        ],
+        "load_alignments": [
+          16384,
+          16384,
+          16384
+        ]
+      }
+    ],
+    "passed": false
+  },
+  "maven_metadata": [
+    {
+      "group": "androidx.camera",
+      "artifact": "camera-core",
+      "latest": "1.7.0-alpha03",
+      "last_updated": "20260826170711",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/camera/camera-core/maven-metadata.xml",
+      "sha256": "c21e84a6b2f0be356176089a2c2e9f117035aea3a156f2767c5cdba42b3793e8"
+    },
+    {
+      "group": "androidx.graphics",
+      "artifact": "graphics-path",
+      "latest": "1.1.0",
+      "last_updated": "20260506170244",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/graphics/graphics-path/maven-metadata.xml",
+      "sha256": "ec4bdb5efbc7db9749b9007fac4bc41ea4d8563c7a6bcc244cfbebc101a34164"
+    },
+    {
+      "group": "com.google.mlkit",
+      "artifact": "mediapipe-internal",
+      "latest": "17.0.0-beta10",
+      "last_updated": "20240807012204",
+      "url": "https://dl.google.com/dl/android/maven2/com/google/mlkit/mediapipe-internal/maven-metadata.xml",
+      "sha256": "1304a9642b33b78fac9ae77110c6a189759c9d79cfc7fcbb7757905656f1e6a8"
+    },
+    {
+      "group": "com.google.mlkit",
+      "artifact": "pose-detection",
+      "latest": "18.0.0-beta5",
+      "last_updated": "20240807012204",
+      "url": "https://dl.google.com/dl/android/maven2/com/google/mlkit/pose-detection/maven-metadata.xml",
+      "sha256": "9c2226d365a0deb8c3ecd5931a0cfae5b894350b4b8ce929abbb1c6dd3b92137"
+    }
+  ],
+  "candidate_vendor_artifacts": [
+    {
+      "coordinate": "androidx.camera:camera-core:1.5.3",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/camera/camera-core/1.5.3/camera-core-1.5.3.aar",
+      "aar_sha256": "54e3d6dc7e19546e782bf8677f1fbc315633dc0205127c5ea00c41e1fc4c88dd",
+      "libraries": [
+        {
+          "path": "jni/arm64-v8a/libimage_processing_util_jni.so",
+          "abi": "arm64-v8a",
+          "sha256": "f0e4611db0d6b68942d8ba6977519f3dd1cdbffa87b7fc16d8006696ba954af4",
+          "elf_class": 64,
+          "machine": 183,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 45872,
+              "memsz": 3280,
+              "end_mod_16384": 0,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/arm64-v8a/libsurface_util_jni.so",
+          "abi": "arm64-v8a",
+          "sha256": "6cb2eac3c68e6a82ce2a5ea5aba86749eb8c609914392e125f6cdfbc208992f8",
+          "elf_class": 64,
+          "machine": 183,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 18864,
+              "memsz": 1616,
+              "end_mod_16384": 4096,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [
+            "GNU_RELRO end is not divisible by 16384 (official static formula)"
+          ],
+          "load_alignments": [
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/armeabi-v7a/libimage_processing_util_jni.so",
+          "abi": "armeabi-v7a",
+          "sha256": "7467e79ba28f412ce46f24dfae5a0479e0bd20b94d834963d1ac4fdb19e406c1",
+          "elf_class": 32,
+          "machine": 40,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 38752,
+              "memsz": 2208,
+              "end_mod_16384": 8192,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/armeabi-v7a/libsurface_util_jni.so",
+          "abi": "armeabi-v7a",
+          "sha256": "ee762c748052666a20c3cffbffb8acef9a405b873d13fb1479cef63fff7aaea0",
+          "elf_class": 32,
+          "machine": 40,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 18128,
+              "memsz": 2352,
+              "end_mod_16384": 4096,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86/libimage_processing_util_jni.so",
+          "abi": "x86",
+          "sha256": "c7164d82c027179a1c7448b9805a555769a2c6789709bb8fbc29311e4d0437e3",
+          "elf_class": 32,
+          "machine": 3,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 55648,
+              "memsz": 1696,
+              "end_mod_16384": 8192,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86/libsurface_util_jni.so",
+          "abi": "x86",
+          "sha256": "516fc48059f0b1064057eaaf0c9916e28610dec07b73839ab345bc9feee9a598",
+          "elf_class": 32,
+          "machine": 3,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 18592,
+              "memsz": 1888,
+              "end_mod_16384": 4096,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86_64/libimage_processing_util_jni.so",
+          "abi": "x86_64",
+          "sha256": "f5d02c9c50c33a45c2125f63f4d6c954aec0e9b1a6ade25074f146ed92264efe",
+          "elf_class": 64,
+          "machine": 62,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 63136,
+              "memsz": 2400,
+              "end_mod_16384": 0,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86_64/libsurface_util_jni.so",
+          "abi": "x86_64",
+          "sha256": "84d8ca201f2160b2ca3a5bd2886994f7287ee7cd09fe73b081f5b236dda8496d",
+          "elf_class": 64,
+          "machine": 62,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 18880,
+              "memsz": 1600,
+              "end_mod_16384": 4096,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [
+            "GNU_RELRO end is not divisible by 16384 (official static formula)"
+          ],
+          "load_alignments": [
+            16384,
+            16384
+          ]
+        }
+      ]
+    },
+    {
+      "coordinate": "androidx.camera:camera-core:1.6.2",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/camera/camera-core/1.6.2/camera-core-1.6.2.aar",
+      "aar_sha256": "ebd66f090414f4c12f23a55b5023aeee1b096da8a06c02a0b6fb3520c4ddadf6",
+      "libraries": [
+        {
+          "path": "jni/arm64-v8a/libimage_processing_util_jni.so",
+          "abi": "arm64-v8a",
+          "sha256": "0292b063fafccf734472cbb59588e756c2dbca907c72021ba6fbf126385508a2",
+          "elf_class": 64,
+          "machine": 183,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 45856,
+              "memsz": 3296,
+              "end_mod_16384": 0,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/arm64-v8a/libsurface_util_jni.so",
+          "abi": "arm64-v8a",
+          "sha256": "a5c9d1928ea92ec7a94dff8cf666e7739cd734198b9f0ae1d4e28ea3c86516ba",
+          "elf_class": 64,
+          "machine": 183,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 18864,
+              "memsz": 1616,
+              "end_mod_16384": 4096,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [
+            "GNU_RELRO end is not divisible by 16384 (official static formula)"
+          ],
+          "load_alignments": [
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/armeabi-v7a/libimage_processing_util_jni.so",
+          "abi": "armeabi-v7a",
+          "sha256": "05973c0cf8e8dd281c8ec505c41814b78b740461056925bb41120594d7c35dcd",
+          "elf_class": 32,
+          "machine": 40,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 38752,
+              "memsz": 2208,
+              "end_mod_16384": 8192,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/armeabi-v7a/libsurface_util_jni.so",
+          "abi": "armeabi-v7a",
+          "sha256": "78eb0b10e91b819be97cb7daa8c97fb757fa6d07cb80ccb7e92c113b45bda9be",
+          "elf_class": 32,
+          "machine": 40,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 18128,
+              "memsz": 2352,
+              "end_mod_16384": 4096,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86/libimage_processing_util_jni.so",
+          "abi": "x86",
+          "sha256": "b52f93b57d408b2306071f9de1a4b0b5684c1b86563e34a8711d80a1e6c03f94",
+          "elf_class": 32,
+          "machine": 3,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 55648,
+              "memsz": 1696,
+              "end_mod_16384": 8192,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86/libsurface_util_jni.so",
+          "abi": "x86",
+          "sha256": "3048a535d701579c87c4ad91283cd1246d2c85399a164ee4720642037ea31727",
+          "elf_class": 32,
+          "machine": 3,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 18592,
+              "memsz": 1888,
+              "end_mod_16384": 4096,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86_64/libimage_processing_util_jni.so",
+          "abi": "x86_64",
+          "sha256": "112703727717651e69e91f3ea2c3c2311737ee5809a909c9d342a811b6c7c069",
+          "elf_class": 64,
+          "machine": 62,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 63056,
+              "memsz": 2480,
+              "end_mod_16384": 0,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86_64/libsurface_util_jni.so",
+          "abi": "x86_64",
+          "sha256": "e5311942b4fce0f7f2505d41150cf9921e558a6368929cb73127450f74dd4fe4",
+          "elf_class": 64,
+          "machine": 62,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 18880,
+              "memsz": 1600,
+              "end_mod_16384": 4096,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [
+            "GNU_RELRO end is not divisible by 16384 (official static formula)"
+          ],
+          "load_alignments": [
+            16384,
+            16384
+          ]
+        }
+      ]
+    },
+    {
+      "coordinate": "androidx.graphics:graphics-path:1.1.0",
+      "url": "https://dl.google.com/dl/android/maven2/androidx/graphics/graphics-path/1.1.0/graphics-path-1.1.0.aar",
+      "aar_sha256": "d031370d45ba4129a175fe9de913328a512b01a3c267e0eaf6b9b759f35842ae",
+      "libraries": [
+        {
+          "path": "jni/arm64-v8a/libandroidx.graphics.path.so",
+          "abi": "arm64-v8a",
+          "sha256": "17ee8d0a8f3c2a7b7b2f0b4e1a93c09e4fbdd1c9bfb335fee238c2767c2c03c1",
+          "elf_class": 64,
+          "machine": 183,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 23360,
+              "memsz": 1216,
+              "end_mod_16384": 8192,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [
+            "GNU_RELRO end is not divisible by 16384 (official static formula)"
+          ],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/armeabi-v7a/libandroidx.graphics.path.so",
+          "abi": "armeabi-v7a",
+          "sha256": "fb5c883968299dda07f2c8552f506aa69a7fff988f8f56285744e08797c4f7cc",
+          "elf_class": 32,
+          "machine": 40,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 21584,
+              "memsz": 2992,
+              "end_mod_16384": 8192,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86/libandroidx.graphics.path.so",
+          "abi": "x86",
+          "sha256": "eec49b40872d5cde5f5156c22c94eee46beaa2d03f603eafc7700c1e7ab7070c",
+          "elf_class": 32,
+          "machine": 3,
+          "static_16kb_checked": false,
+          "relro": [
+            {
+              "vaddr": 22784,
+              "memsz": 1792,
+              "end_mod_16384": 8192,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        },
+        {
+          "path": "jni/x86_64/libandroidx.graphics.path.so",
+          "abi": "x86_64",
+          "sha256": "c48fe70862aae15ba6fdb173d31a0285b3ae7ae2588f5d724f8d502a2208364c",
+          "elf_class": 64,
+          "machine": 62,
+          "static_16kb_checked": true,
+          "relro": [
+            {
+              "vaddr": 23488,
+              "memsz": 1088,
+              "end_mod_16384": 8192,
+              "trailing_page_writable_load_overlap": false
+            }
+          ],
+          "failures": [
+            "GNU_RELRO end is not divisible by 16384 (official static formula)"
+          ],
+          "load_alignments": [
+            16384,
+            16384,
+            16384
+          ]
+        }
+      ]
+    }
+  ]
+}
