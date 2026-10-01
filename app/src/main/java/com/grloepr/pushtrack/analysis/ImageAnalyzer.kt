@@ -1,5 +1,6 @@
 package com.grloepr.pushtrack.analysis
 
+import android.os.SystemClock
 import android.annotation.SuppressLint
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -20,7 +21,9 @@ data class PoseDetectionResult(
     val pose: Pose,
     val imageWidth: Int,
     val imageHeight: Int,
-    val rotationDegrees: Int
+    val rotationDegrees: Int,
+    val generation: Long = 0L,
+    val timestampMs: Long = SystemClock.elapsedRealtime()
 )
 
 /**
@@ -32,6 +35,12 @@ class ImageAnalyzer(
 ) : ImageAnalysis.Analyzer {
     
     private val analysisScope = CoroutineScope(Dispatchers.Default)
+    @Volatile private var generation = 0L
+
+    /** In-flight results from the old camera must not reach the new session. */
+    fun invalidate() { generation += 1L }
+    fun isCurrent(result: PoseDetectionResult): Boolean = result.generation == generation
+
     private var lastAnalysisTime = 0L
     private val targetAnalysisInterval = 1000L / 15L // ~15 FPS (66ms between frames)
     private var isProcessing = false
@@ -41,7 +50,7 @@ class ImageAnalyzer(
     
     @SuppressLint("UnsafeOptInUsageError")
     override fun analyze(imageProxy: ImageProxy) {
-        val currentTime = System.currentTimeMillis()
+        val currentTime = SystemClock.elapsedRealtime()
         
         // Throttle analysis to target FPS and skip if already processing
         if (currentTime - lastAnalysisTime < targetAnalysisInterval || isProcessing) {
@@ -49,6 +58,7 @@ class ImageAnalyzer(
             return
         }
         
+        val frameGeneration = generation
         lastAnalysisTime = currentTime
         isProcessing = true
         
@@ -81,12 +91,14 @@ class ImageAnalyzer(
                 onSuccess = { pose ->
                     // Emit pose results with image dimensions to collectors on background thread
                     analysisScope.launch {
-                        _poseResults.tryEmit(
+                        if (frameGeneration == generation) _poseResults.tryEmit(
                             PoseDetectionResult(
                                 pose = pose,
                                 imageWidth = imageWidth,
                                 imageHeight = imageHeight,
-                                rotationDegrees = rotationDegrees
+                                rotationDegrees = rotationDegrees,
+                                generation = frameGeneration,
+                                timestampMs = currentTime
                             )
                         )
                         isProcessing = false

@@ -84,6 +84,7 @@ class DynamicExerciseEngine(
     private var repStartedAt = -1L
     private var holdStartedAt = -1L
     private var holdCounted = false
+    private var lastPoseAt = -1L
 
     fun reset() {
         angleSmoothers.values.forEach { it.clear() }
@@ -97,13 +98,35 @@ class DynamicExerciseEngine(
         repStartedAt = -1L
         holdStartedAt = -1L
         holdCounted = false
-        onFrame(EngineFrame.idle(System.currentTimeMillis()))
+        lastPoseAt = -1L
+        onFrame(EngineFrame.idle())
+    }
+
+    /** Drop an incomplete attempt while preserving completed repetitions. */
+    fun interrupt(timestampMs: Long) {
+        angleSmoothers.values.forEach { it.clear() }
+        alignmentMonitor.reset()
+        tempo.reset()
+        changePhase(EnginePhase.SEARCHING, timestampMs)
+        startHeldSince = -1L
+        repStartedAt = -1L
+        holdStartedAt = -1L
+        holdCounted = false
+        lastPoseAt = -1L
+        emit(0, 0, 0f, 0L, null, false, CameraAlignment.searching(), timestampMs)
     }
 
     fun onPose(pose: PoseSnapshot, timestampMs: Long) {
+        // Duplicate/out-of-order callbacks cannot advance dwell or hold clocks.
+        if (lastPoseAt >= 0 && timestampMs <= lastPoseAt) return
+        if (lastPoseAt >= 0 && timestampMs - lastPoseAt > MAX_FRAME_GAP_MS) {
+            interrupt(timestampMs)
+        }
+        lastPoseAt = timestampMs
         val alignment = alignmentMonitor.update(pose, timestampMs)
 
         if (!isPoseVisible(pose)) {
+            tempo.reset()
             angleSmoothers.values.forEach { it.clear() }
             if (phase != EnginePhase.SEARCHING) changePhase(EnginePhase.SEARCHING, timestampMs)
             startHeldSince = -1L
@@ -286,8 +309,14 @@ class DynamicExerciseEngine(
         val required = schema.requiredJointsVisible.ifEmpty {
             schema.trackingAngles.values.flatMap { it.jointIds }.distinct()
         }
-        val visible = required.count { pose.confidence(it) > VISIBILITY_CONFIDENCE }
-        return visible >= required.size * VISIBILITY_QUORUM
+        // A quorum can hide the very joint used for scoring. All scoring angles
+        // must be measurable in this frame, even when auxiliary joints are visible.
+        val tracked = schema.trackingAngles.values.flatMap { it.jointIds }.distinct()
+        return (required + tracked).distinct().all {
+            pose[it].isConfident(VISIBILITY_CONFIDENCE)
+        } && schema.trackingAngles.values.all {
+            calculateAngle(pose[it.startId], pose[it.vertexId], pose[it.endId]) != null
+        }
     }
 
     private fun canChangePhase(timestampMs: Long): Boolean =
@@ -329,6 +358,7 @@ class DynamicExerciseEngine(
     }
 
     private companion object {
+        const val MAX_FRAME_GAP_MS = 500L
         const val SMOOTHING_WINDOW = 5
         const val START_HOLD_MS = 350L
         const val PHASE_DEBOUNCE_MS = 180L
@@ -338,9 +368,6 @@ class DynamicExerciseEngine(
 
         /** A joint counts as visible above this in-frame likelihood. */
         const val VISIBILITY_CONFIDENCE = 0.5f
-
-        /** Fraction of required joints that must be visible to keep tracking. */
-        const val VISIBILITY_QUORUM = 0.7f
 
         /** Movement depth needed before READY commits to a descent. */
         const val ECCENTRIC_ENTRY_PROGRESS = 0.12f

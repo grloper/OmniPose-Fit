@@ -1,5 +1,8 @@
 package com.grloepr.pushtrack.ui.screen
 
+import android.os.SystemClock
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.activity.compose.BackHandler
 import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
@@ -47,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -125,9 +129,23 @@ fun TrainingScreen(
     LaunchedEffect(imageAnalyzer, engine) {
         engine.reset()
         imageAnalyzer.poseResults.collect { result ->
+            if (!imageAnalyzer.isCurrent(result)) return@collect
+            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@collect
             poseResult = result
-            engine.onPose(PoseSnapshot.fromMlKit(result.pose), System.currentTimeMillis())
+            engine.onPose(PoseSnapshot.fromMlKit(result.pose), result.timestampMs)
         }
+    }
+
+    DisposableEffect(lifecycleOwner, engine) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                imageAnalyzer.invalidate()
+                engine.interrupt(SystemClock.elapsedRealtime())
+                poseResult = null
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Voice rep announcements + rep flash on the overlay
@@ -145,10 +163,10 @@ fun TrainingScreen(
 
     // Mastery goal
     LaunchedEffect(frame.repCount) {
-        if (!masteryFired && frame.repCount >= node.masteryReps) {
+        if (node.id == schema.id && !masteryFired && frame.repCount >= node.masteryReps) {
             masteryFired = true
             onMastered()
-            ttsManager.speak("Incredible. Skill mastered!")
+            ttsManager.speak("Session target reached!")
             celebrationVisible = true
         }
     }
@@ -236,8 +254,24 @@ fun TrainingScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             ExerciseChip(node = node, plane = schema.optimalPlane)
+            Text(
+                text = if (node.id == schema.id) {
+                    "Estimates joint motion; does not certify technique or mastery"
+                } else {
+                    "Generic ${schema.displayName} tracking; variant is not validated"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier.background(Color.Black.copy(alpha = 0.7f)).padding(8.dp)
+            )
             Spacer(modifier = Modifier.height(10.dp))
             CameraAngleBanner(alignment = frame.alignment)
+            Text(
+                text = "Completed: ${frame.repCount}",
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.testTag("rep-status")
+            )
         }
 
         // Partial-rep hint
@@ -330,6 +364,9 @@ fun TrainingScreen(
                     icon = Icons.Rounded.Cameraswitch,
                     contentDescription = "Switch camera",
                     onClick = {
+                        imageAnalyzer.invalidate()
+                        engine.interrupt(SystemClock.elapsedRealtime())
+                        poseResult = null
                         cameraSelector =
                             if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
                                 CameraSelector.DEFAULT_FRONT_CAMERA

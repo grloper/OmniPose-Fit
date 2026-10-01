@@ -249,4 +249,97 @@ class DynamicExerciseEngineTest {
             )
         )
     }
+    @Test
+    fun `camera gap cannot complete an unobserved hold`() {
+        val recorder = Recorder()
+        val engine = DynamicExerciseEngine(squatHoldSchema(2000L), recorder::onFrame)
+        var t = drive(engine, 0L, List(6) { 172.0 })
+        t = drive(engine, t, List(10) { 82.0 })
+        engine.onPose(poseWithKneeAngle(82.0), t + 3000L)
+        assertEquals(0, recorder.totalReps)
+        assertEquals(0L, recorder.last.holdMs)
+        assertEquals(EnginePhase.SEARCHING, recorder.last.phase)
+    }
+
+    @Test
+    fun `interruption discards incomplete cycle and reacquires start`() {
+        val recorder = Recorder()
+        val engine = DynamicExerciseEngine(squatSchema(), recorder::onFrame)
+        var t = drive(engine, 0L, List(6) { 172.0 })
+        t = drive(engine, t, List(8) { 82.0 })
+        engine.interrupt(t)
+        drive(engine, t + 100L, List(8) { 172.0 })
+        assertEquals(0, recorder.totalReps)
+        assertEquals(EnginePhase.READY, recorder.last.phase)
+    }
+
+    @Test
+    fun `duplicate and backward timestamps do not advance state`() {
+        val recorder = Recorder()
+        val engine = DynamicExerciseEngine(squatSchema(), recorder::onFrame)
+        engine.onPose(poseWithKneeAngle(172.0), 1000L)
+        engine.onPose(poseWithKneeAngle(172.0), 900L)
+        engine.onPose(poseWithKneeAngle(172.0), 1000L)
+        assertEquals(1000L, recorder.last.timestampMs)
+        assertEquals(EnginePhase.SEARCHING, recorder.last.phase)
+    }
+
+    @Test
+    fun `nonfinite or collapsed geometry cannot score`() {
+        val point = JointPoint(1f, 1f, 1f)
+        assertEquals(null, calculateAngle(point, point, JointPoint(2f, 2f, 1f)))
+        assertEquals(null, calculateAngle(JointPoint(Float.NaN, 1f, 1f), point, JointPoint(2f, 2f, 1f)))
+    }
+
+    @Test
+    fun `visible auxiliary joints cannot conceal a missing scoring joint`() {
+        val recorder = Recorder()
+        val schema = squatHoldSchema(2000L).copy(requiredJointsVisible = listOf(
+            PoseLandmark.LEFT_HIP, PoseLandmark.LEFT_KNEE, PoseLandmark.LEFT_ANKLE,
+            PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER
+        ))
+        val engine = DynamicExerciseEngine(schema, recorder::onFrame)
+        fun complete(angle: Double): PoseSnapshot {
+            val base = poseWithKneeAngle(angle)
+            return PoseSnapshot(mapOf(
+                PoseLandmark.LEFT_HIP to base[PoseLandmark.LEFT_HIP]!!,
+                PoseLandmark.LEFT_KNEE to base[PoseLandmark.LEFT_KNEE]!!,
+                PoseLandmark.LEFT_ANKLE to base[PoseLandmark.LEFT_ANKLE]!!,
+                PoseLandmark.LEFT_SHOULDER to JointPoint(100f, 50f, 1f),
+                PoseLandmark.RIGHT_SHOULDER to JointPoint(110f, 50f, 1f)
+            ))
+        }
+        var t = 0L
+        repeat(6) { engine.onPose(complete(172.0), t); t += 100L }
+        repeat(10) { engine.onPose(complete(82.0), t); t += 100L }
+        val base = complete(82.0)
+        val occluded = PoseSnapshot(mapOf(
+            PoseLandmark.LEFT_HIP to base[PoseLandmark.LEFT_HIP]!!,
+            PoseLandmark.LEFT_KNEE to base[PoseLandmark.LEFT_KNEE]!!,
+            PoseLandmark.LEFT_SHOULDER to base[PoseLandmark.LEFT_SHOULDER]!!,
+            PoseLandmark.RIGHT_SHOULDER to base[PoseLandmark.RIGHT_SHOULDER]!!
+        ))
+        repeat(25) { engine.onPose(occluded, t); t += 100L }
+        assertEquals(0, recorder.totalReps)
+        assertFalse(recorder.last.poseVisible)
+        assertEquals(EnginePhase.SEARCHING, recorder.last.phase)
+    }
+
+    @Test
+    fun `interruption retains completed repetitions but reset clears session`() {
+        val recorder = Recorder()
+        val engine = DynamicExerciseEngine(squatSchema(), recorder::onFrame)
+        var t = drive(engine, 0L, List(6) { 172.0 })
+        t = drive(engine, t, List(8) { 82.0 })
+        t = drive(engine, t, List(8) { 172.0 })
+        assertEquals(1, recorder.totalReps)
+        engine.interrupt(t)
+        assertEquals(1, recorder.totalReps)
+        assertEquals(0, recorder.last.repDelta)
+        engine.reset()
+        assertEquals(0, recorder.totalReps)
+        assertEquals(0, recorder.totalPartials)
+        assertEquals(null, recorder.last.primaryAngle)
+    }
+
 }

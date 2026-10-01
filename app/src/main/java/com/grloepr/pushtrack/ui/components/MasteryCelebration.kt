@@ -179,7 +179,7 @@ fun MasteryCelebration(
 
                 Spacer(modifier = Modifier.height(22.dp))
                 Text(
-                    text = "SKILL MASTERED",
+                    text = "SESSION TARGET REACHED",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 4.sp,
