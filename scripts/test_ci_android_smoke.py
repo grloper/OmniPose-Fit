@@ -23,3 +23,14 @@ with tempfile.TemporaryDirectory(prefix='omni-smoke-test-') as tmp:
  assert 'Emulator exited before Android became ready' in result.stderr,result.stderr
  assert 'synthetic early emulator failure' in result.stderr,result.stderr
  print('PASS early emulator exit retains log and fails without starting instrumentation')
+
+ # A test failure remains fatal, and the actual Gradle invocation preserves its APKs.
+ put('emulator/emulator', 'case "$1" in -version) echo "synthetic emulator";; -list-avds) echo omnipose-ci;; -accel-check) exit 0;; -avd) exec sleep 30;; esac\n')
+ put('platform-tools/adb', 'printf "%s\\n" "$*" >> "$RUNNER_TEMP/adb-calls"\ncase "$*" in "get-state") exit 1;; "shell getprop sys.boot_completed") echo 1;; "shell pm path android") echo package:/system/framework/framework-res.apk;; "shell getconf PAGE_SIZE") echo 4096;; esac\n')
+ apk=root/'app/build/outputs/apk/debug/app-universal-debug.apk';apk.parent.mkdir(parents=True,exist_ok=True);apk.write_bytes(b'synthetic')
+ gradle=root/'gradlew';gradle.write_text('#!/bin/bash\nprintf "%s\\n" "$*" > "$RUNNER_TEMP/gradle-args"\nexit 42\n');gradle.chmod(0o755)
+ result=subprocess.run(['bash',str(script)],cwd=root,env=env,text=True,capture_output=True,timeout=10)
+ assert result.returncode==42,(result.returncode,result.stderr)
+ assert '-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true' in (run/'gradle-args').read_text()
+ assert (root/'evidence/smoke-exit-code.txt').read_text().strip()=='42'
+ print('PASS instrumentation failure stays fatal and Gradle retains tested APKs for evidence')

@@ -100,8 +100,11 @@ recorder_pid=$!
 
 # Keep real instrumentation mandatory. Readiness and cleanup are infrastructure gates,
 # never substitutes for the CameraX/ML Kit/reset/switch/exit assertions.
+# AGP 8.5.2 exposes this stable keep-installed option; retain the tested ABI APK
+# for identity capture/relaunch instead of reinstalling a different artifact.
 timeout --kill-after=5s 360 ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
-  -Pkotlin.compiler.execution.strategy=in-process | tee evidence/instrumentation.txt
+  -Pkotlin.compiler.execution.strategy=in-process \
+  -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true | tee evidence/instrumentation.txt
 wait "$recorder_pid"
 recorder_pid=
 timeout --kill-after=5s 30 "$ADB" shell am start -W -n com.grloepr.pushtrack/.MainActivity | tee evidence/launch.txt
