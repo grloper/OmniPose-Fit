@@ -32,6 +32,14 @@ cleanup() {
   fi
   if [ -n "$recorder_pid" ]; then kill "$recorder_pid" 2>/dev/null; fi
   if [ -n "$emulator_pid" ]; then kill "$emulator_pid" 2>/dev/null; fi
+  if [ "$status" -ne 0 ]; then
+    for log in toolchain.txt avd-create.txt avd-list.txt emulator-avds.txt acceleration.txt emulator.log; do
+      if [ -f "evidence/$log" ]; then
+        printf '\n--- %s ---\n' "$log" >&2
+        tail -60 "evidence/$log" >&2
+      fi
+    done
+  fi
   printf '%s\n' "$status" > evidence/smoke-exit-code.txt
   exit "$status"
 }
