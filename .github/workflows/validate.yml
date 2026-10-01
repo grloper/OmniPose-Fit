@@ -2,7 +2,7 @@ name: Validate Android
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [master]
 permissions:
   contents: read
 jobs:
@@ -21,7 +21,7 @@ jobs:
       - name: Test, lint and build development APKs
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
+          ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest bundleRelease --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
       - name: Enable runner virtualization
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
@@ -31,6 +31,12 @@ jobs:
         timeout-minutes: 10
         run: |
           mkdir -p evidence
+          cleanup() {
+            adb logcat -d > evidence/logcat.txt || true
+            adb pull /sdcard/journey.mp4 evidence/journey.mp4 || true
+            adb emu kill || true
+          }
+          trap cleanup EXIT
           echo no | avdmanager create avd -n omnipose-ci -k "system-images;android-35;google_apis;x86_64" --force
           "$ANDROID_HOME/emulator/emulator" -avd omnipose-ci -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect -camera-back emulated -camera-front emulated > evidence/emulator.log 2>&1 &
           booted=false
@@ -40,8 +46,11 @@ jobs:
           done
           [ "$booted" = true ]
           adb install app/build/outputs/apk/debug/app-universal-debug.apk
-          ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
           adb logcat -c
+          adb shell screenrecord --time-limit 60 /sdcard/journey.mp4 > evidence/screenrecord.log 2>&1 &
+          recorder=$!
+          ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
+          wait "$recorder"
           adb shell am start -W -n com.grloepr.pushtrack/.MainActivity | tee evidence/launch.txt
           sleep 8
           adb shell pidof com.grloepr.pushtrack > evidence/pid.txt
@@ -57,6 +66,7 @@ jobs:
           name: OmniPose-validation
           path: |
             app/build/outputs/apk/debug/*.apk
+            app/build/outputs/bundle/release/*.aab
             app/build/reports/tests/
             app/build/reports/androidTests/
             app/build/reports/lint-results-debug.*

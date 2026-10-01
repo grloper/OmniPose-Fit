@@ -46,7 +46,7 @@ fun CameraPermissionRequest(
 }
 
 @Composable
-fun CameraPermissionDeniedContent() {
+fun CameraPermissionDeniedContent(onExit: () -> Unit = {}) {
     val context = LocalContext.current
     
     Column(
@@ -77,6 +77,7 @@ fun CameraPermissionDeniedContent() {
         ) {
             Text("Open Settings")
         }
+        TextButton(onClick = onExit) { Text("Back to skills") }
     }
 }
 

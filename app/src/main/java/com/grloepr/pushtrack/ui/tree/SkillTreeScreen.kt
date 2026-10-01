@@ -34,6 +34,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -96,6 +98,18 @@ fun SkillTreeScreen(
     modifier: Modifier = Modifier
 ) {
     var inspectedNode by remember { mutableStateOf<SkillNode?>(null) }
+    var privacyVisible by remember { mutableStateOf(false) }
+
+    if (privacyVisible) {
+        AlertDialog(
+            onDismissRequest = { privacyVisible = false },
+            title = { Text("Privacy and motion tracking") },
+            text = {
+                Text("Camera images and pose results are processed on your device. This app does not record video or upload camera frames. Google's ML Kit SDK sends API performance and utilization metrics to Google, including device/app information and installation identifiers.\n\nProgress is stored locally and may be included in Android backups according to your device settings. You can revoke camera access in Android settings.\n\nMotion estimates are experimental; they do not certify technique or provide medical assessment. Illustrated previews are not live tracking results.")
+            },
+            confirmButton = { TextButton(onClick = { privacyVisible = false }) { Text("Close") } }
+        )
+    }
 
     Column(
         modifier = modifier
@@ -125,6 +139,7 @@ fun SkillTreeScreen(
             .statusBarsPadding()
     ) {
         TreeHeader(treeState)
+        TextButton(onClick = { privacyVisible = true }) { Text("Privacy and tracking") }
 
         Box(
             modifier = Modifier

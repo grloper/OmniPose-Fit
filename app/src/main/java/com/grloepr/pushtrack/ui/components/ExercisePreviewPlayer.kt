@@ -78,7 +78,7 @@ fun ExercisePreviewPlayer(
         )
 
         Text(
-            text = "DEMO",
+            text = "ILLUSTRATED PREVIEW",
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             color = ElectricCyan,

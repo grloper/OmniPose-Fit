@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Data class to hold pose detection results with image dimensions
@@ -43,7 +44,7 @@ class ImageAnalyzer(
 
     private var lastAnalysisTime = 0L
     private val targetAnalysisInterval = 1000L / 15L // ~15 FPS (66ms between frames)
-    private var isProcessing = false
+    private val isProcessing = AtomicBoolean(false)
     
     private val _poseResults = MutableSharedFlow<PoseDetectionResult>(replay = 1)
     val poseResults: SharedFlow<PoseDetectionResult> = _poseResults.asSharedFlow()
@@ -53,14 +54,13 @@ class ImageAnalyzer(
         val currentTime = SystemClock.elapsedRealtime()
         
         // Throttle analysis to target FPS and skip if already processing
-        if (currentTime - lastAnalysisTime < targetAnalysisInterval || isProcessing) {
+        if (currentTime - lastAnalysisTime < targetAnalysisInterval || !isProcessing.compareAndSet(false, true)) {
             imageProxy.close()
             return
         }
         
         val frameGeneration = generation
         lastAnalysisTime = currentTime
-        isProcessing = true
         
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
@@ -101,7 +101,7 @@ class ImageAnalyzer(
                                 timestampMs = currentTime
                             )
                         )
-                        isProcessing = false
+                        isProcessing.set(false)
                         imageProxy.close()
                     }
                 },
@@ -109,13 +109,13 @@ class ImageAnalyzer(
                     // Log error but continue processing
                     analysisScope.launch {
                         println("Pose detection failed: ${exception.message}")
-                        isProcessing = false
+                        isProcessing.set(false)
                         imageProxy.close()
                     }
                 }
             )
         } else {
-            isProcessing = false
+            isProcessing.set(false)
             imageProxy.close()
         }
     }
