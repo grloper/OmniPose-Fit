@@ -21,6 +21,11 @@ jobs:
         run: |
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "ANDROID_SDK_HOME=$RUNNER_TEMP/omnipose-sdk-user" >> "$GITHUB_ENV"
+          echo "ANDROID_USER_HOME=$RUNNER_TEMP/omnipose-sdk-user/.android" >> "$GITHUB_ENV"
+          echo "ANDROID_EMULATOR_HOME=$RUNNER_TEMP/omnipose-sdk-user/.android" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=$RUNNER_TEMP/omnipose-sdk-user/.android/avd" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/omnipose-sdk-user/.android/avd"
       - name: Install emulator runtime library
         run: |
           sudo apt-get update
