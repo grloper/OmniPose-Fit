@@ -2,6 +2,8 @@
 
 An Android exercise-tracking prototype built with Kotlin, Jetpack Compose, CameraX and ML Kit Pose Detection. It renders a skill tree and training UI and applies configurable landmark-angle rules to workout phases and repetition counts.
 
+The current repair candidate adds continuous-frame timing, scoring-joint validation, camera stream isolation, stable camera/executor ownership, permission recovery and in-app privacy information. Generic tracking does not certify advanced variant mastery. See [tracking validation](docs/TRACKING-VALIDATION.md) and the [Play release gates](docs/PLAY_RELEASE.md). Local validation passed 16 unit tests, lint and development package assembly; human exercise accuracy and signed store publication remain separate requirements.
+
 ## What ran
 
 The Windows audit assembled a debug APK with a dedicated JDK/Android SDK and passed ten JVM tests for the dynamic exercise engine. These tests verify bounded engine behavior with synthetic landmark/angle data. No camera session, Android device run or real exercise-form accuracy was validated.
