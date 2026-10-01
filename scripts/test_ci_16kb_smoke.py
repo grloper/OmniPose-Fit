@@ -48,7 +48,7 @@ esac
             apk.parent.mkdir(parents=True)
             apk.write_bytes(b"synthetic")
             env = dict(os.environ, ANDROID_HOME=str(sdk), RUNNER_TEMP=str(runner),
-                       SYSTEM_IMAGE="system-images;android-35;google_apis_ps16k;x86_64",
+                       SYSTEM_IMAGE="system-images;android-36;google_apis_ps16k;x86_64",
                        EXPECTED_PAGE_SIZE="16384", FAKE_PAGE_SIZE=page_size,
                        FAKE_LINKER=linker, FAKE_PACKAGE=package)
             result = subprocess.run(["bash", str(SCRIPT)], cwd=root, env=env,
