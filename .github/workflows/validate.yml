@@ -70,5 +70,17 @@ jobs:
             app/build/reports/androidTests/
             app/build/reports/lint-results-debug.*
             evidence/
-
-
+      - name: Upload compact runtime evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: OmniPose-runtime-evidence
+          path: |
+            evidence/runtime-screens/**/*.png
+            evidence/practice-screens/**/*.png
+            evidence/instrumentation.txt
+            evidence/failure.txt
+            evidence/logcat.txt
+            evidence/smoke-exit-code.txt
+            evidence/prepush-snapshot.json
+            app/build/outputs/androidTest-results/**/TEST-*.xml
