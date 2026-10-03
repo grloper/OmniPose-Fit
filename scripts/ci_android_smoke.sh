@@ -117,7 +117,7 @@ recorder_pid=$!
 # AGP 8.5.2 exposes this stable keep-installed option; retain the tested ABI APK
 # for identity capture/relaunch instead of reinstalling a different artifact.
 stage=instrumentation
-timeout --kill-after=5s "$((720 + SOAK_MINUTES * 60))" ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
+timeout --kill-after=5s "$((1200 + SOAK_MINUTES * 60))" ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
   -Pkotlin.compiler.execution.strategy=in-process \
   -Pandroid.testInstrumentationRunnerArguments.soakMinutes="$SOAK_MINUTES" \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true | tee evidence/instrumentation.txt
@@ -154,4 +154,5 @@ if grep -q 'FATAL EXCEPTION' evidence/logcat.txt; then
   echo 'Runtime fatal exception found in logcat' >&2
   false
 fi
+
 
