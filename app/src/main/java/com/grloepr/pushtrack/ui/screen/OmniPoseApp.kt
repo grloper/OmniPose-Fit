@@ -23,6 +23,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.grloepr.pushtrack.progression.CalisthenicsSkillGraph
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -50,7 +52,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun OmniPoseApp() {
     val treeState = rememberSkillTreeState()
-    var trainingNode by remember { mutableStateOf<SkillNode?>(null) }
+    var trainingNodeId by rememberSaveable { mutableStateOf<String?>(null) }
+    val trainingNode = trainingNodeId?.let(CalisthenicsSkillGraph::byId)
 
     AnimatedContent(
         targetState = trainingNode,
@@ -63,14 +66,14 @@ fun OmniPoseApp() {
         if (node == null) {
             SkillTreeScreen(
                 treeState = treeState,
-                onStartTraining = { selected -> trainingNode = selected }
+                onStartTraining = { selected -> trainingNodeId = selected.id }
             )
         } else {
             TrainingFlow(
                 node = node,
                 alreadyMastered = treeState.isMastered(node.id),
                 onMastered = { treeState.master(node.id) },
-                onExit = { trainingNode = null }
+                onExit = { trainingNodeId = null }
             )
         }
     }
