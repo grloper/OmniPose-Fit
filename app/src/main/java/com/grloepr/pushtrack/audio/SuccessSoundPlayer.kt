@@ -54,7 +54,7 @@ class SuccessSoundPlayer(context: Context) {
             else manager.requestAudioFocus(listener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
         }.getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
         if (granted != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return
-        playbackWindow.played(now)
+        playbackWindow.played(cue, now)
         val volume = if (cue == CompletionCue.TEMPO) 0.18f else 0.35f
         stream = runCatching { pool?.play(sound, volume, volume, 1, 0, 1f) ?: 0 }.getOrDefault(0)
         if (stream == 0) stop() else handler.postDelayed(endCue, 500L)

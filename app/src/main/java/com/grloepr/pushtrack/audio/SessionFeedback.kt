@@ -38,7 +38,12 @@ class SessionFeedback(private val target: Int, private val isHold: Boolean) {
 /** Ordinary pulses never crowd a completion; a target may replace a preceding short cue. */
 class CuePlaybackWindow {
     private var lastPlayedAt = -1000L
+    private var lastCue: CompletionCue? = null
     fun eligible(cue: CompletionCue, nowMs: Long): Boolean =
-        nowMs >= lastPlayedAt && (cue == CompletionCue.TARGET || nowMs - lastPlayedAt >= 300L)
-    fun played(nowMs: Long) { lastPlayedAt = nowMs }
+        nowMs >= lastPlayedAt && (
+            cue == CompletionCue.TARGET ||
+            (lastCue == CompletionCue.TEMPO && cue != CompletionCue.TEMPO) ||
+            nowMs - lastPlayedAt >= 300L
+        )
+    fun played(cue: CompletionCue, nowMs: Long) { lastCue = cue; lastPlayedAt = nowMs }
 }

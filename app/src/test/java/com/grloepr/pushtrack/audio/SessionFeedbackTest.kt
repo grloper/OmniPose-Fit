@@ -51,14 +51,26 @@ class SessionFeedbackTest {
     @Test fun `rapid tempo pulses never crowd completion and target replaces previous cue`() {
         val timing = CuePlaybackWindow()
         assertTrue(timing.eligible(CompletionCue.REP, 1000))
-        timing.played(1000)
+        timing.played(CompletionCue.REP, 1000)
         assertFalse(timing.eligible(CompletionCue.TEMPO, 1100))
         assertFalse(timing.eligible(CompletionCue.REP, 1200))
         assertTrue(timing.eligible(CompletionCue.TARGET, 1200))
-        timing.played(1200)
+        timing.played(CompletionCue.TARGET, 1200)
         assertFalse(timing.eligible(CompletionCue.TEMPO, 1499))
         assertTrue(timing.eligible(CompletionCue.TEMPO, 1500))
         assertFalse(timing.eligible(CompletionCue.REP, 1199))
+    }
+
+    @Test fun `completed repetition or hold replaces a preceding tempo pulse`() {
+        for (completion in listOf(CompletionCue.REP, CompletionCue.HOLD, CompletionCue.TARGET)) {
+            val timing = CuePlaybackWindow()
+            timing.played(CompletionCue.TEMPO, 1000)
+            assertTrue(timing.eligible(completion, 1100))
+            timing.played(completion, 1100)
+            assertFalse(timing.eligible(CompletionCue.TEMPO, 1200))
+            assertFalse(timing.eligible(CompletionCue.REP, 1200))
+            assertTrue(timing.eligible(CompletionCue.REP, 1400))
+        }
     }
 
 }
