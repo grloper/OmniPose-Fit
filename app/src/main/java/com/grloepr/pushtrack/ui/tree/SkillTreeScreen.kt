@@ -154,15 +154,17 @@ fun SkillTreeScreen(
             TextButton(onClick = { listView = !listView }) { Text(if (listView) "Map view" else "List view") }
         }
 
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
-            SkillBranch.entries.forEach { branch ->
-                TextButton(onClick = {
-                    navigationScope.launch { horizontalPosition.animateScrollTo((laneWidthPx * branch.lane).toInt()) }
-                }) { Text(branch.label) }
+        if (!listView) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+                SkillBranch.entries.forEach { branch ->
+                    TextButton(onClick = {
+                        navigationScope.launch { horizontalPosition.animateScrollTo((laneWidthPx * branch.lane).toInt()) }
+                    }) { Text(branch.label) }
+                }
             }
+            Text("Choose a branch above or swipe the map sideways", style = MaterialTheme.typography.bodySmall,
+                color = TextMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
         }
-        Text("Choose a branch above or swipe the map sideways", style = MaterialTheme.typography.bodySmall,
-            color = TextMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
         if (listView) {
             Column(Modifier.weight(1f).navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
                 CalisthenicsSkillGraph.nodes.forEach { node ->
