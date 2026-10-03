@@ -42,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -80,7 +81,7 @@ import com.grloepr.pushtrack.ui.components.CameraAngleBanner
 import com.grloepr.pushtrack.ui.components.GlassPanel
 import com.grloepr.pushtrack.ui.components.MasteryCelebration
 import com.grloepr.pushtrack.ui.components.OptimalEdgeGlow
-import com.grloepr.pushtrack.ui.components.RepCounterDial
+import com.grloepr.pushtrack.ui.components.SessionCounter
 import com.grloepr.pushtrack.ui.components.StateMachineRibbon
 import com.grloepr.pushtrack.ui.components.TempoPulseIndicator
 import com.grloepr.pushtrack.ui.overlay.ScannerViewfinder
@@ -348,23 +349,7 @@ fun TrainingScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 14.dp)
                 ) {
-                    val holdTargetMs = schema.holdTargetMs
-                    if (holdTargetMs != null) {
-                        // For isometric skills the dial counts hold seconds, and
-                        // the ring fills as the hold approaches its target.
-                        RepCounterDial(
-                            repCount = (frame.holdMs / 1000L).toInt(),
-                            goalReps = (holdTargetMs / 1000L).toInt(),
-                            progress = frame.progress,
-                            unitLabel = "sec hold"
-                        )
-                    } else {
-                        RepCounterDial(
-                            repCount = frame.repCount,
-                            goalReps = node.masteryReps,
-                            progress = frame.progress
-                        )
-                    }
+                    SessionCounter(frame, node.masteryReps, schema.holdTargetMs)
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         StateMachineRibbon(phase = frame.phase, isHold = schema.isHold)

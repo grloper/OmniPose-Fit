@@ -61,7 +61,7 @@ class SuccessSoundPlayer(context: Context) {
         runCatching { if (stream != 0) pool?.stop(stream) }
         stream = 0
     }
-    private val playback = FocusPlayback(::requestFocus, ::abandonFocus, { cue ->
+    private val playback: FocusPlayback = FocusPlayback(::requestFocus, ::abandonFocus, { cue ->
         val sound = when (cue) { CompletionCue.TARGET -> target; CompletionCue.TEMPO -> tick; else -> rep }
         val volume = if (cue == CompletionCue.TEMPO) 0.18f else 0.35f
         stream = runCatching { pool?.play(sound, volume, volume, 1, 0, 1f) ?: 0 }.getOrDefault(0)
