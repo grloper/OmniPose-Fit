@@ -236,6 +236,7 @@ fun TrainingScreen(
             factory = { previewView },
             modifier = Modifier.fillMaxSize().testTag("camera-preview").semantics {
                 stateDescription = if (poseResult != null) "Pose analysis active" else "Waiting for pose analysis"
+                analysisTimestampMs = poseResult?.timestampMs ?: -1L
             }
         )
 

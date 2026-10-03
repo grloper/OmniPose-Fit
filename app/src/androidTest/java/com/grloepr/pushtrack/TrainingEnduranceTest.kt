@@ -2,6 +2,7 @@ package com.grloepr.pushtrack
 
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import com.grloepr.pushtrack.ui.screen.AnalysisTimestampMs
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -21,12 +22,25 @@ class TrainingEnduranceTest {
         ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
     }
 
+    private var lastAnalysisTimestamp = -1L
+
+    private fun latestAnalysisTimestamp(): Long {
+        val config = compose.onAllNodesWithTag("camera-preview").fetchSemanticsNodes()
+            .firstOrNull()?.config ?: return -1L
+        return if (config.contains(AnalysisTimestampMs)) config[AnalysisTimestampMs] else -1L
+    }
+
     private fun awaitCamera() {
+        val previousTimestamp = lastAnalysisTimestamp
         compose.waitUntil(30000) {
             compose.onAllNodes(hasTestTag("camera-preview") and SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription, "Pose analysis active"
-            )).fetchSemanticsNodes().isNotEmpty()
+            )).fetchSemanticsNodes().isNotEmpty() &&
+                latestAnalysisTimestamp() > previousTimestamp &&
+                SystemClock.elapsedRealtime() - latestAnalysisTimestamp() < 10000L
         }
+        lastAnalysisTimestamp = latestAnalysisTimestamp()
+        println("OmniPose fresh analysis timestamp: $lastAnalysisTimestamp")
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
         compose.onNodeWithText("Camera unavailable. Try switching camera or end this session.")
             .assertDoesNotExist()
@@ -71,10 +85,17 @@ class TrainingEnduranceTest {
         assumeTrue("Long endurance is explicitly opt-in", minutes > 0)
         enterTraining()
         val until = SystemClock.elapsedRealtime() + minutes * 60000L
+        var nextSample = SystemClock.elapsedRealtime() + 60000L
+        var sample = 0
         while (SystemClock.elapsedRealtime() < until) {
             Thread.sleep(1000)
-            compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
-            compose.onNodeWithText("Session target reached").assertDoesNotExist()
+            if (SystemClock.elapsedRealtime() >= nextSample) {
+                awaitCamera() // Fails if the detector froze despite its cached active label.
+                compose.onNodeWithText("Session target reached").assertDoesNotExist()
+                sample += 1
+                println("OmniPose endurance minute=$sample freshFrameMs=$lastAnalysisTimestamp")
+                nextSample = SystemClock.elapsedRealtime() + 60000L
+            }
         }
         awaitCamera()
         compose.onNodeWithContentDescription("End session").performClick()
