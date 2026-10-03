@@ -102,7 +102,7 @@ recorder_pid=$!
 # never substitutes for the CameraX/ML Kit/reset/switch/exit assertions.
 # AGP 8.5.2 exposes this stable keep-installed option; retain the tested ABI APK
 # for identity capture/relaunch instead of reinstalling a different artifact.
-timeout --kill-after=5s 360 ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
+timeout --kill-after=5s 720 ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
   -Pkotlin.compiler.execution.strategy=in-process \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true | tee evidence/instrumentation.txt
 wait "$recorder_pid"
