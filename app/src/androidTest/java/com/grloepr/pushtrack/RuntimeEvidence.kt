@@ -11,7 +11,9 @@ fun captureRuntimeEvidence(name: String) {
     val directory = requireNotNull(instrumentation.targetContext.getExternalFilesDir("evidence"))
     directory.mkdirs()
     instrumentation.waitForIdleSync()
-    instrumentation.uiAutomation.waitForIdle(150L, 3000L)
+    // Continuous detector timestamps can keep accessibility events flowing.
+    // Allow a bounded display-frame interval; semantic assertions govern state.
+    android.os.SystemClock.sleep(250L)
     val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot()) { "Screenshot unavailable" }
     try {
         File(directory, "$name.png").outputStream().use {
