@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import com.grloepr.pushtrack.audio.*
 import com.grloepr.pushtrack.engine.EngineFrame
 import com.grloepr.pushtrack.ui.components.*
+import com.grloepr.pushtrack.ui.theme.PushTrackTheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -24,10 +25,12 @@ class SessionPresentationTest {
         val cues = mutableListOf<CompletionCue>()
         controller.accept(frame, true, true)
         compose.setContent {
+            PushTrackTheme {
             Column {
                 SessionCounter(frame, 2, holdTarget)
                 MasteryCelebration(visible, "Practice", if (outcome?.awardProgress == true) 10 else 0,
                     onContinue = { visible = false }, onKeepPracticing = { visible = false })
+            }
             }
         }
         fun emit(count: Int, time: Long, active: Boolean = true) = compose.runOnIdle {
