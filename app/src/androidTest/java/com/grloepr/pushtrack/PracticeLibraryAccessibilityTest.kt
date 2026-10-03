@@ -17,7 +17,7 @@ import org.junit.Assert.assertTrue
 class PracticeLibraryAccessibilityTest {
     @get:Rule val compose = createComposeRule()
 
-    @androidx.annotation.RequiresApi(30)
+    @SdkSuppress(minSdkVersion = 30)
     private fun nativeImeVisible(): Boolean {
         var visible = false
         InstrumentationRegistry.getInstrumentation().runOnMainSync {

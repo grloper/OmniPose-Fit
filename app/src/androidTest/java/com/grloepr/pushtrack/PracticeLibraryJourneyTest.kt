@@ -14,7 +14,7 @@ import androidx.test.filters.SdkSuppress
 class PracticeLibraryJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
-    @androidx.annotation.RequiresApi(30)
+    @SdkSuppress(minSdkVersion = 30)
     private fun awaitNativeKeyboardAndStableBounds(matcher: SemanticsMatcher) {
         var lastBounds: Rect? = null
         var stableSince = SystemClock.elapsedRealtime()
