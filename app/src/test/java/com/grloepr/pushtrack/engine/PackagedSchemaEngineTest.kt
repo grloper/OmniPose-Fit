@@ -10,15 +10,15 @@ import kotlin.math.*
 
 /** Actual bundled JSON + production decoder/engine. Synthetic coherent limb chains, not ML Kit accuracy. */
 @RunWith(Parameterized::class)
-class PackagedSchemaEngineTest(private val schema: ExerciseSchema) {
+class PackagedSchemaEngineTest(private val schemaId: String, private val schema: ExerciseSchema) {
     companion object {
     @JvmStatic @Parameterized.Parameters(name = "{0}")
-    fun schemas(): List<Array<ExerciseSchema>> {
+    fun schemas(): List<Array<Any>> {
         val directory = listOf(File("src/main/assets/exercises"), File("app/src/main/assets/exercises"))
             .first { it.isDirectory }
         val files = directory.listFiles()!!.filter { it.extension == "json" }.sortedBy { it.name }
         assertEquals(10, files.size)
-        return files.map { arrayOf(SchemaParser.parse(JSONObject(it.readText()))) }
+        return files.map { val schema = SchemaParser.parse(JSONObject(it.readText())); arrayOf<Any>(schema.id, schema) }
     }
     }
     private fun point(origin: JointPoint, toward: JointPoint, angle: Double): JointPoint {
