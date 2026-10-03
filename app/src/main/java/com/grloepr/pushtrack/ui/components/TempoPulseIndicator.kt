@@ -27,7 +27,7 @@ import com.grloepr.pushtrack.ui.theme.TextMuted
 /**
  * Smooth tempo pacer: a ripple ring expands from a breathing core once per
  * [intervalMs], giving the athlete a metronome to sync reps against. Pairs
- * with [com.grloepr.pushtrack.audio.TempoTickPlayer] for the audio pip.
+ * with [com.grloepr.pushtrack.audio.SuccessSoundPlayer] for the original soft tick.
  */
 @Composable
 fun TempoPulseIndicator(
