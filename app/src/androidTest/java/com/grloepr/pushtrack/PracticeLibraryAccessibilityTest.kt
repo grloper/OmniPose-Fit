@@ -29,7 +29,7 @@ class PracticeLibraryAccessibilityTest {
         compose.onNodeWithText("Favorite Wall Push-Up").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Add to plan").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Manual practice").performScrollTo().performClick()
-        val goal = compose.onNode(hasText("Personal goal", substring = true) and hasSetTextAction())
+        val goal = compose.onNode(manualGoalMatcher())
         goal.performScrollTo().performClick()
         compose.waitUntil(10000) {
             var visible = false
@@ -41,11 +41,11 @@ class PracticeLibraryAccessibilityTest {
             visible
         }
         capturePracticeEvidence("manual-font2-keyboard")
-        compose.onNodeWithText("Report 1 repetition").performScrollTo().performClick()
-        compose.onNodeWithText("Reset reported count").performScrollTo().performClick()
-        compose.onNodeWithText("0 / 10 repetitions reported").performScrollTo().assertIsDisplayed()
+        compose.manualControl("Report 1 repetition").performScrollTo().performClick()
+        compose.manualControl("Reset reported count").performScrollTo().performClick()
+        compose.manualControl("0 / 10 repetitions reported").performScrollTo().assertIsDisplayed()
         capturePracticeEvidence("manual-font2-controls")
-        compose.onNodeWithText("End practice").performClick()
+        compose.manualControl("End practice").performClick()
         prefs.edit().remove("favorites").remove("plan").commit()
     }
 }

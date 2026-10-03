@@ -101,7 +101,7 @@ private fun ManualPracticeDialog(node: SkillNode, onDismiss: () -> Unit) {
     var count by rememberSaveable(node.id) { mutableIntStateOf(0) }
     var seconds by rememberSaveable(node.id) { mutableStateOf(false) }
     val goal = target.toIntOrNull()?.takeIf { it in 1..300 }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(node.title) }, text = {
+    AlertDialog(modifier = Modifier.testTag("manual-practice-dialog"), onDismissRequest = onDismiss, title = { Text(node.title) }, text = {
         Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Camera-free, self-reported practice. Choose a comfortable goal; stop if uncomfortable. This does not certify technique or award XP.")
             Column { FilterChip(!seconds, { seconds = false; count = 0 }, { Text("Repetitions") })
