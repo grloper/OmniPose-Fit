@@ -44,8 +44,13 @@ class PracticeLibraryAccessibilityTest {
         compose.manualControl("Report 1 repetition").performScrollTo().performClick()
         compose.manualControl("Reset reported count").performScrollTo().performClick()
         compose.manualControl("0 / 10 repetitions reported").performScrollTo().assertIsDisplayed()
+        compose.manualControl("Reset reported count").performScrollTo().assertIsDisplayed()
+        // End is a fixed dialog confirm button, outside the scrollable text content.
+        compose.manualControl("End practice").assertIsDisplayed()
+        compose.waitForIdle()
         capturePracticeEvidence("manual-font2-controls")
         compose.manualControl("End practice").performClick()
+        compose.onNodeWithTag("manual-practice-dialog").assertDoesNotExist()
         prefs.edit().remove("favorites").remove("plan").commit()
     }
 }

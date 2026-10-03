@@ -44,7 +44,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.grloepr.pushtrack.practice.rememberLibraryBrowseState
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Alignment
@@ -106,7 +107,8 @@ fun SkillTreeScreen(
 ) {
     var inspectedNode by remember { mutableStateOf<SkillNode?>(null) }
     var privacyVisible by remember { mutableStateOf(false) }
-    val libraryState = rememberSaveableStateHolder()
+    val libraryBrowseState = rememberLibraryBrowseState()
+    val libraryListState = rememberLazyListState()
     var listView by rememberSaveable { mutableStateOf(true) }
     val horizontalPosition = rememberScrollState()
     val navigationScope = rememberCoroutineScope()
@@ -168,9 +170,8 @@ fun SkillTreeScreen(
                 color = TextMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
         }
         if (listView) {
-            libraryState.SaveableStateProvider("practice-library") {
-                PracticeLibraryScreen(onInspect = { inspectedNode = it }, modifier = Modifier.weight(1f))
-            }
+            PracticeLibraryScreen(onInspect = { inspectedNode = it }, modifier = Modifier.weight(1f),
+                browseState = libraryBrowseState, listState = libraryListState)
         } else Box(
             modifier = Modifier
                 .weight(1f)

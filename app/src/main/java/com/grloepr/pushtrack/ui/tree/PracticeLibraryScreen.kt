@@ -3,6 +3,8 @@ package com.grloepr.pushtrack.ui.tree
 import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
@@ -16,20 +18,25 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.grloepr.pushtrack.engine.ExerciseLibrary
 import com.grloepr.pushtrack.practice.PracticeLibrary
+import com.grloepr.pushtrack.practice.LibraryBrowseState
+import com.grloepr.pushtrack.practice.rememberLibraryBrowseState
 import com.grloepr.pushtrack.progression.*
+import com.grloepr.pushtrack.ui.theme.TextMuted
+import com.grloepr.pushtrack.ui.theme.TextBright
 
 /** Browsing and manual practice require neither camera access nor progression unlocks. */
 @Composable
-fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = Modifier) {
+fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = Modifier,
+    browseState: LibraryBrowseState = rememberLibraryBrowseState(), listState: LazyListState = rememberLazyListState()) {
     val context = LocalContext.current
     val prefs = remember { context.applicationContext.getSharedPreferences("practice_library", Context.MODE_PRIVATE) }
     val known = remember { CalisthenicsSkillGraph.nodes.map { it.id }.toSet() }
     var favorites by remember { mutableStateOf(PracticeLibrary.readFavorites(prefs.all["favorites"], known)) }
     var plan by remember { mutableStateOf(PracticeLibrary.readPlan(prefs.all["plan"], known)) }
-    var query by rememberSaveable { mutableStateOf("") }
-    var branchName by rememberSaveable { mutableStateOf<String?>(null) }
-    var filter by rememberSaveable { mutableStateOf("All") }
-    var motionFilter by rememberSaveable { mutableStateOf("Any motion") }
+    var query by browseState.query
+    var branchName by browseState.branchName
+    var filter by browseState.filter
+    var motionFilter by browseState.motionFilter
     val holds = remember { CalisthenicsSkillGraph.nodes.filter { node -> node.schemaId?.let { ExerciseLibrary.get(context, it)?.isHold } == true }.map { it.id }.toSet() }
     var manualId by rememberSaveable { mutableStateOf<String?>(null) }
     val branch = SkillBranch.entries.find { it.name == branchName }
@@ -38,7 +45,7 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
         "My plan" -> plan.toSet()
         else -> null
     }).filter { motionFilter == "Any motion" || (it.id in holds) == (motionFilter == "Holds") }.let { matches -> if (filter == "My plan") matches.sortedBy { plan.indexOf(it.id) } else matches }
-    LazyColumn(modifier.navigationBarsPadding().testTag("exercise-library-list"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(modifier.navigationBarsPadding().testTag("exercise-library-list"), state = listState, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Column {
         OutlinedTextField(query, { query = it.take(200) }, label = { Text("Search exercises") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
@@ -60,8 +67,8 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
             TextButton({ query = ""; branchName = null; filter = "All"; motionFilter = "Any motion" }) { Text("Reset filters") }
         }
         Text("${nodes.size} exercises · Plans are stored locally; Android backup may include them. Manual practice does not award progression.",
-            style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
-        if (nodes.isEmpty()) Text("No matching exercises. Change your search or filters.", Modifier.padding(16.dp))
+            style = MaterialTheme.typography.bodySmall, color = TextMuted, modifier = Modifier.padding(16.dp))
+        if (nodes.isEmpty()) Text("No matching exercises. Change your search or filters.", Modifier.padding(16.dp), color = TextBright)
         } }
             items(nodes, key = { it.id }) { node ->
                 OutlinedCard(Modifier.fillMaxWidth()) {
