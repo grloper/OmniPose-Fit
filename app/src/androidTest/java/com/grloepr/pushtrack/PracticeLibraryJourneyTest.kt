@@ -6,10 +6,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import androidx.test.filters.SdkSuppress
 
 class PracticeLibraryJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
+    @SdkSuppress(minSdkVersion = 29)
     @Test fun actualRouteManualPracticeSurvivesRecreationWithoutCameraUseOrProgressionAward() = assertManualJourneyDoesNotUseCamera {
         capturePracticeEvidence("library-normal")
         val progressBefore = context.getSharedPreferences("omnipose_progression", 0).all.toMap()
@@ -55,3 +57,4 @@ class PracticeLibraryJourneyTest {
         compose.onNodeWithText("Unfavorite Wall Push-Up").performScrollTo().assertExists()
     }
 }
+

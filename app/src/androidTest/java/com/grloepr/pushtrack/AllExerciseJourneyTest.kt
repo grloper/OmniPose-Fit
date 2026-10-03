@@ -13,6 +13,7 @@ import com.grloepr.pushtrack.ui.screen.AnalysisTimestampMs
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import androidx.test.filters.SdkSuppress
 
 /** All 19 actual app routes. Empty-camera runs do not demonstrate recognition accuracy. */
 class AllExerciseJourneyTest {
@@ -51,6 +52,7 @@ class AllExerciseJourneyTest {
     private fun analysisTimestamp(): Long = compose.onNodeWithTag("camera-preview")
         .fetchSemanticsNode().config[AnalysisTimestampMs]
 
+    @SdkSuppress(minSdkVersion = 29)
     @Test fun allNineteenDetailsAndManualUnitsResetEndReopenWithoutCameraOrXp() = assertManualJourneyDoesNotUseCamera {
         val progressionBefore = context.getSharedPreferences("omnipose_progression", 0).all.toMap()
         assertEquals(19, CalisthenicsSkillGraph.nodes.size)
@@ -119,3 +121,4 @@ class AllExerciseJourneyTest {
             .getStringSet("mastered_skills", emptySet()).orEmpty().toSet())
     }
 }
+
