@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
@@ -22,8 +23,8 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
     val context = LocalContext.current
     val prefs = remember { context.applicationContext.getSharedPreferences("practice_library", Context.MODE_PRIVATE) }
     val known = remember { CalisthenicsSkillGraph.nodes.map { it.id }.toSet() }
-    var favorites by remember { mutableStateOf(PracticeLibrary.validatedIds(prefs.getStringSet("favorites", emptySet()).orEmpty(), known).toSet()) }
-    var plan by remember { mutableStateOf(PracticeLibrary.validatedIds(prefs.getString("plan", "").orEmpty().split(','), known)) }
+    var favorites by remember { mutableStateOf(PracticeLibrary.readFavorites(prefs.all["favorites"], known)) }
+    var plan by remember { mutableStateOf(PracticeLibrary.readPlan(prefs.all["plan"], known)) }
     var query by rememberSaveable { mutableStateOf("") }
     var branchName by rememberSaveable { mutableStateOf<String?>(null) }
     var filter by rememberSaveable { mutableStateOf("All") }
@@ -36,7 +37,8 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
         "My plan" -> plan.toSet()
         else -> null
     }).filter { motionFilter == "Any motion" || (it.id in holds) == (motionFilter == "Holds") }.let { matches -> if (filter == "My plan") matches.sortedBy { plan.indexOf(it.id) } else matches }
-    Column(modifier) {
+    LazyColumn(modifier.navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Column {
         OutlinedTextField(query, { query = it.take(200) }, label = { Text("Search exercises") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
@@ -59,7 +61,7 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
         Text("${nodes.size} exercises · Your plan stays on this device. Manual practice does not award progression.",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
         if (nodes.isEmpty()) Text("No matching exercises. Change your search or filters.", Modifier.padding(16.dp))
-        LazyColumn(Modifier.weight(1f).navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        } }
             items(nodes, key = { it.id }) { node ->
                 OutlinedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp)) {
@@ -86,7 +88,6 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
                     }
                 }
             }
-        }
     }
     manualId?.let { id -> CalisthenicsSkillGraph.byId(id)?.let { node ->
         ManualPracticeDialog(node, onDismiss = { manualId = null })
@@ -100,10 +101,10 @@ private fun ManualPracticeDialog(node: SkillNode, onDismiss: () -> Unit) {
     var seconds by rememberSaveable(node.id) { mutableStateOf(false) }
     val goal = target.toIntOrNull()?.takeIf { it in 1..300 }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(node.title) }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Camera-free, self-reported practice. Choose a comfortable goal; stop if uncomfortable. This does not certify technique or award XP.")
-            Row { FilterChip(!seconds, { seconds = false; count = 0 }, { Text("Repetitions") })
-                Spacer(Modifier.width(8.dp))
+            Column { FilterChip(!seconds, { seconds = false; count = 0 }, { Text("Repetitions") })
+                Spacer(Modifier.height(8.dp))
                 FilterChip(seconds, { seconds = true; count = 0 }, { Text("Seconds held") }) }
             OutlinedTextField(target, { target = it.take(3); count = 0 }, label = { Text("Personal goal (1–300)") }, singleLine = true,
                 isError = goal == null)

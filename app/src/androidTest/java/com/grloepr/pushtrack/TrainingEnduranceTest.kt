@@ -20,6 +20,7 @@ class TrainingEnduranceTest {
         val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation
             .executeShellCommand("pm grant ${InstrumentationRegistry.getInstrumentation().targetContext.packageName} android.permission.CAMERA")
         ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
+        compose.onNodeWithText("Map view").performClick()
     }
 
     private var lastAnalysisTimestamp = -1L

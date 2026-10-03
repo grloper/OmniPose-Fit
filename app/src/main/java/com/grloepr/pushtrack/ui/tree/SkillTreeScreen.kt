@@ -44,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Alignment
@@ -105,6 +106,7 @@ fun SkillTreeScreen(
 ) {
     var inspectedNode by remember { mutableStateOf<SkillNode?>(null) }
     var privacyVisible by remember { mutableStateOf(false) }
+    val libraryState = rememberSaveableStateHolder()
     var listView by rememberSaveable { mutableStateOf(true) }
     val horizontalPosition = rememberScrollState()
     val navigationScope = rememberCoroutineScope()
@@ -166,7 +168,9 @@ fun SkillTreeScreen(
                 color = TextMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
         }
         if (listView) {
-            PracticeLibraryScreen(onInspect = { inspectedNode = it }, modifier = Modifier.weight(1f))
+            libraryState.SaveableStateProvider("practice-library") {
+                PracticeLibraryScreen(onInspect = { inspectedNode = it }, modifier = Modifier.weight(1f))
+            }
         } else Box(
             modifier = Modifier
                 .weight(1f)

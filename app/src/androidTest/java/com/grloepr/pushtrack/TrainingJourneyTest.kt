@@ -17,6 +17,7 @@ class TrainingJourneyTest {
     }
 
     @Test fun skillTrainingResetSwitchAndExit() {
+        compose.onNodeWithText("Map view").performClick()
         compose.onNodeWithContentDescription("Wall Push-Up").performClick()
         compose.waitForIdle()
         captureRuntimeEvidence("exercise-detail")
