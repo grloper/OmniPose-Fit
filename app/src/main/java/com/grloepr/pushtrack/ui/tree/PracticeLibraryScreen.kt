@@ -59,7 +59,7 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
             }
             TextButton({ query = ""; branchName = null; filter = "All"; motionFilter = "Any motion" }) { Text("Reset filters") }
         }
-        Text("${nodes.size} exercises · Your plan stays on this device. Manual practice does not award progression.",
+        Text("${nodes.size} exercises · Plans are stored locally; Android backup may include them. Manual practice does not award progression.",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
         if (nodes.isEmpty()) Text("No matching exercises. Change your search or filters.", Modifier.padding(16.dp))
         } }

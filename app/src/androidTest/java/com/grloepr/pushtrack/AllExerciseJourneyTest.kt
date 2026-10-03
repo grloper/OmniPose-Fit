@@ -37,9 +37,16 @@ class AllExerciseJourneyTest {
     }
     private fun details(node: SkillNode) {
         clickLibraryAction("exercise-detail-${node.id}")
-        compose.onNodeWithText(node.description).performScrollTo().assertExists()
-        compose.onNodeWithText(MotionTrackingLimitations.forExercise(node)).performScrollTo().assertExists()
-        compose.onNodeWithText("Play illustrated preview").performScrollTo().assertExists()
+        val insideSheet = hasAnyAncestor(hasTestTag("exercise-detail-sheet"))
+        val instructions = hasText(node.description) and insideSheet
+        compose.onAllNodes(instructions).assertCountEquals(1)
+        compose.onNode(instructions).performScrollTo().assertExists()
+        val limitations = hasText(MotionTrackingLimitations.forExercise(node)) and insideSheet
+        compose.onAllNodes(limitations).assertCountEquals(1)
+        compose.onNode(limitations).performScrollTo().assertExists()
+        val preview = hasText("Play illustrated preview") and insideSheet
+        compose.onAllNodes(preview).assertCountEquals(1)
+        compose.onNode(preview).performScrollTo().assertExists()
     }
     private fun awaitFreshAnalysis(after: Long = -1L) {
         compose.waitUntil(30000) {
@@ -63,7 +70,7 @@ class AllExerciseJourneyTest {
             selectExercise(node)
             details(node)
             if (node.id in setOf("wall_pushup", "handstand", "front_lever"))
-                capturePracticeEvidence("all-exercises-detail-${node.id}")
+                capturePracticeEvidence(exerciseEvidenceName("all-exercises-detail", node.id))
             Espresso.pressBack()
             for (seconds in listOf(false, true)) {
                 clickLibraryAction("manual-practice-${node.id}")
@@ -113,7 +120,7 @@ class AllExerciseJourneyTest {
                 compose.onNodeWithContentDescription("Resume tracking").performClick()
                 awaitFreshAnalysis(pausedAt)
                 if (node.id in setOf("wall_pushup", "handstand", "front_lever") && iteration == 0)
-                    capturePracticeEvidence("all-exercises-tracking-${node.id}-empty-synthetic-camera")
+                    capturePracticeEvidence(exerciseEvidenceName("all-exercises-tracking", node.id, "empty-synthetic-camera"))
                 compose.onNodeWithContentDescription("End session").performClick()
                 compose.onNodeWithTag("exercise-library-list").assertExists()
                 println("ALL19 camera route PASS ${node.id} iteration=$iteration (no valid pose / no accuracy claim)")
