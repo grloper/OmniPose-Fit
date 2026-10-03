@@ -294,9 +294,9 @@ fun TrainingScreen(
             )
             Spacer(modifier = Modifier.height(10.dp))
             if (paused) {
-                Text("Paused — completed counts are kept. Resume from the start posture.", color = Color.White)
+                Text("Paused — completed counts are kept. Resume from the start posture.", color = Color.White, modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             } else if (cameraProvider == null) {
-                Text("Starting camera…", color = Color.White)
+                Text("Starting camera…", color = Color.White, modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             } else if (cameraError) {
                 Text("Camera unavailable. Try switching camera or end this session.", color = SignalAmber, modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             } else {
