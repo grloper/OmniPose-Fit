@@ -12,6 +12,12 @@ def verdict(runs, sha):
 
 def main():
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    tag = os.environ.get("RELEASE_TAG", "")
+    if not tag.startswith("v") or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for c in tag):
+        raise SystemExit("Release tag must be a safe existing v-prefixed tag")
+    target = subprocess.check_output(["git", "rev-parse", f"refs/tags/{tag}^{{commit}}"], text=True).strip()
+    if target != sha:
+        raise SystemExit("Release tag does not identify the validated checkout commit")
     repo = os.environ["GITHUB_REPOSITORY"]
     deadline = time.monotonic() + 600
     while time.monotonic() < deadline:
