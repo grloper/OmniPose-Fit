@@ -13,6 +13,9 @@ internal fun capturePracticeEvidence(name: String) {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "practice-evidence").apply { mkdirs() }
     instrumentation.waitForIdleSync()
+    // Compose idle precedes the compositor presenting the final dialog/IME frame.
+    android.os.SystemClock.sleep(250)
+    instrumentation.waitForIdleSync()
     val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
     try {
         File(directory, "$name.png").outputStream().use {
