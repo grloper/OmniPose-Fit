@@ -3,25 +3,32 @@ package com.grloepr.pushtrack.engine
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.junit.runners.Parameterized
 import java.io.File
 import kotlin.math.*
 
 /** Actual bundled JSON + production decoder/engine. Synthetic coherent limb chains, not ML Kit accuracy. */
-class PackagedSchemaEngineTest {
-    private fun schemas(): List<ExerciseSchema> {
+@RunWith(Parameterized::class)
+class PackagedSchemaEngineTest(private val schema: ExerciseSchema) {
+    companion object {
+    @JvmStatic @Parameterized.Parameters(name = "{0}")
+    fun schemas(): List<Array<ExerciseSchema>> {
         val directory = listOf(File("src/main/assets/exercises"), File("app/src/main/assets/exercises"))
             .first { it.isDirectory }
         val files = directory.listFiles()!!.filter { it.extension == "json" }.sortedBy { it.name }
         assertEquals(10, files.size)
-        return files.map { SchemaParser.parse(JSONObject(it.readText())) }
+        return files.map { arrayOf(SchemaParser.parse(JSONObject(it.readText()))) }
+    }
     }
     private fun point(origin: JointPoint, toward: JointPoint, angle: Double): JointPoint {
         val direction = atan2((toward.y - origin.y).toDouble(), (toward.x - origin.x).toDouble()) + Math.toRadians(angle)
         return JointPoint(origin.x + (100 * cos(direction)).toFloat(), origin.y + (100 * sin(direction)).toFloat(), 1f)
     }
-    private fun fixture(schema: ExerciseSchema, inflection: Boolean): Map<Int, JointPoint> {
+    private fun fixture(schema: ExerciseSchema, inflection: Boolean, primaryOverride: Double? = null): Map<Int, JointPoint> {
         val state = schema.states.getValue(if (inflection) SchemaStates.INFLECTION else SchemaStates.START)
         fun desired(vertex: String): Double {
+            if (primaryOverride != null && vertex == schema.primaryAngle.vertexName) return primaryOverride
             val definitions = schema.trackingAngles.values.filter { it.vertexName == vertex }
             val constraints = definitions.mapNotNull { state.constraints[it.name] } +
                 if (schema.isHold && inflection) definitions.mapNotNull { schema.states.getValue(SchemaStates.START).constraints[it.name] } else emptyList()
@@ -45,12 +52,12 @@ class PackagedSchemaEngineTest {
         schema.trackingAngles.forEach { (name, definition) ->
             val angle = calculateAngle(result[definition.startId], result[definition.vertexId], result[definition.endId])
             assertNotNull("${schema.id}: degenerate $name", angle)
-            state.constraints[name]?.let { assertTrue("${schema.id}: $name=$angle", it.isSatisfied(angle!!)) }
+            if (primaryOverride == null) state.constraints[name]?.let { assertTrue("${schema.id}: $name=$angle", it.isSatisfied(angle!!)) }
         }
         return result
     }
     @Test fun everyPackagedSchemaCountsItsCoherentMovementAndRejectsInterruptedInvalidStreams() {
-        for (schema in schemas()) {
+        run {
             var frame = EngineFrame.idle()
             val engine = DynamicExerciseEngine(schema) { frame = it }
             var time = 0L
@@ -89,6 +96,18 @@ class PackagedSchemaEngineTest {
             feed(PoseSnapshot(invalid), 1000)
             assertEquals("${schema.id}: invalid geometry", 0, frame.repCount)
             assertFalse(frame.poseVisible)
+            engine.reset()
+            val startConstraint = schema.states.getValue(SchemaStates.START).constraints.getValue(schema.primaryAngleName)
+            val bottomConstraint = schema.states.getValue(SchemaStates.INFLECTION).constraints.getValue(schema.primaryAngleName)
+            val wrongAngle = (5..175).map { it.toDouble() }.first {
+                !startConstraint.isSatisfied(it - 1) && !startConstraint.isSatisfied(it + 1) &&
+                    !bottomConstraint.isSatisfied(it - 1) && !bottomConstraint.isSatisfied(it + 1)
+            }
+            val wrong = PoseSnapshot(fixture(schema, false, wrongAngle))
+            feed(wrong, (schema.holdTargetMs ?: 1000L) + 2000)
+            assertTrue("${schema.id}: finite wrong pose must remain visible", frame.poseVisible)
+            assertEquals("${schema.id}: visible wrong posture cannot count", 0, frame.repCount)
+            assertEquals(EnginePhase.SEARCHING, frame.phase)
             engine.reset()
             finish()
             assertEquals("${schema.id}: repeat after reset", 1, frame.repCount)
