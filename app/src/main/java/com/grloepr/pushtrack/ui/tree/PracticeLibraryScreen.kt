@@ -9,11 +9,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.grloepr.pushtrack.engine.ExerciseLibrary
@@ -29,6 +34,8 @@ import com.grloepr.pushtrack.ui.theme.TextBright
 fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = Modifier,
     browseState: LibraryBrowseState = rememberLibraryBrowseState(), listState: LazyListState = rememberLazyListState()) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val prefs = remember { context.applicationContext.getSharedPreferences("practice_library", Context.MODE_PRIVATE) }
     val known = remember { CalisthenicsSkillGraph.nodes.map { it.id }.toSet() }
     var favorites by remember { mutableStateOf(PracticeLibrary.readFavorites(prefs.all["favorites"], known)) }
@@ -48,6 +55,8 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
     LazyColumn(modifier.navigationBarsPadding().testTag("exercise-library-list"), state = listState, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Column {
         OutlinedTextField(query, { query = it.take(200) }, label = { Text("Search exercises") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); keyboardController?.hide() }),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
             listOf("All", "Favorites", "My plan").forEach { label ->
