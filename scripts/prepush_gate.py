@@ -54,7 +54,7 @@ def main():
     else:
         execute([sys.executable, "-m", "unittest", "discover", "-s", "tools", "-p", "test_*.py"])
     if not options.static_only:
-        wrapper = "./gradlew.bat" if os.name == "nt" else "./gradlew"
+        wrapper = str(root / "gradlew.bat") if os.name == "nt" else "./gradlew"
         execute([wrapper, *TASKS[options.app], "--no-daemon", "--max-workers=2",
                  "-Dorg.gradle.jvmargs=-Xmx1536m -XX:ActiveProcessorCount=2 -Dfile.encoding=UTF-8",
                  "-Pkotlin.compiler.execution.strategy=in-process"])
@@ -73,3 +73,4 @@ def main():
     print("PASS frozen snapshot " + head, flush=True)
 if __name__ == "__main__":
     main()
+
