@@ -1,6 +1,5 @@
 package com.grloepr.pushtrack
 
-import android.Manifest
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.compose.ui.test.*
@@ -52,9 +51,7 @@ class AllExerciseJourneyTest {
     private fun analysisTimestamp(): Long = compose.onNodeWithTag("camera-preview")
         .fetchSemanticsNode().config[AnalysisTimestampMs]
 
-    @Test fun allNineteenDetailsAndManualUnitsResetEndReopenWithoutCameraOrXp() {
-        val permissionBefore = context.checkSelfPermission(Manifest.permission.CAMERA)
-        val appOpsBefore = shell("appops get ${context.packageName} CAMERA")
+    @Test fun allNineteenDetailsAndManualUnitsResetEndReopenWithoutCameraOrXp() = assertManualJourneyDoesNotUseCamera {
         val progressionBefore = context.getSharedPreferences("omnipose_progression", 0).all.toMap()
         assertEquals(19, CalisthenicsSkillGraph.nodes.size)
         capturePracticeEvidence("all-exercises-library-production-theme")
@@ -89,8 +86,6 @@ class AllExerciseJourneyTest {
                 context.getSharedPreferences("omnipose_progression", 0).all.toMap())
             println("ALL19 manual/instructions/preview PASS ${node.id}")
         }
-        assertEquals(permissionBefore, context.checkSelfPermission(Manifest.permission.CAMERA))
-        assertEquals(appOpsBefore, shell("appops get ${context.packageName} CAMERA"))
     }
 
     @Test fun allNineteenEmptyCameraRoutesPauseResumeResetExitAndRepeat() {

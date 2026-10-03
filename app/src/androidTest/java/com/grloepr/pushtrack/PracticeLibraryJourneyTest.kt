@@ -1,7 +1,5 @@
 package com.grloepr.pushtrack
 
-import android.Manifest
-import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -12,14 +10,8 @@ import org.junit.Test
 class PracticeLibraryJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
-    private fun cameraAppOp(): String = ParcelFileDescriptor.AutoCloseInputStream(
-        InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand("appops get ${context.packageName} CAMERA")
-    ).bufferedReader().use { it.readText() }
-
-    @Test fun actualRouteManualPracticeSurvivesRecreationWithoutCameraUseOrProgressionAward() {
+    @Test fun actualRouteManualPracticeSurvivesRecreationWithoutCameraUseOrProgressionAward() = assertManualJourneyDoesNotUseCamera {
         capturePracticeEvidence("library-normal")
-        val permissionBefore = context.checkSelfPermission(Manifest.permission.CAMERA)
-        val appOpBefore = cameraAppOp()
         val progressBefore = context.getSharedPreferences("omnipose_progression", 0).all.toMap()
         compose.onNodeWithText("Search exercises").performTextInput("Wall Push-Up")
         compose.onNodeWithText("Manual practice").performScrollTo().performClick()
@@ -37,8 +29,6 @@ class PracticeLibraryJourneyTest {
         compose.onNodeWithText("0 / 10 repetitions reported").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("camera-preview").assertDoesNotExist()
         compose.onNodeWithText("End practice").performClick()
-        assertEquals(permissionBefore, context.checkSelfPermission(Manifest.permission.CAMERA))
-        assertEquals(appOpBefore, cameraAppOp())
         assertEquals(progressBefore, context.getSharedPreferences("omnipose_progression", 0).all.toMap())
     }
 
