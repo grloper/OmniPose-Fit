@@ -153,6 +153,9 @@ fun TrainingScreen(
     }
 
 
+    // Keep the preview bound while avoiding detector work outside active training.
+    SideEffect { imageAnalyzer.setEnabled(sessionActive && !paused && !celebrationVisible) }
+
     // Pose stream → engine
     LaunchedEffect(imageAnalyzer, engine) {
         engine.reset()
@@ -169,6 +172,7 @@ fun TrainingScreen(
             if (event == Lifecycle.Event.ON_RESUME) sessionActive = true
             if (event == Lifecycle.Event.ON_PAUSE) {
                 sessionActive = false
+                imageAnalyzer.setEnabled(false)
                 successPlayer.stop()
                 imageAnalyzer.invalidate()
                 engine.interrupt(SystemClock.elapsedRealtime())
@@ -409,6 +413,7 @@ fun TrainingScreen(
                     contentDescription = if (paused) "Resume tracking" else "Pause tracking",
                     onClick = {
                         paused = !paused
+                        imageAnalyzer.setEnabled(sessionActive && !paused && !celebrationVisible)
                         imageAnalyzer.invalidate()
                         engine.interrupt(SystemClock.elapsedRealtime())
                         poseResult = null
