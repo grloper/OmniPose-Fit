@@ -14,7 +14,7 @@ import androidx.test.filters.SdkSuppress
 class PracticeLibraryJourneyTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
-    @SdkSuppress(minSdkVersion = 29)
+    @androidx.annotation.RequiresApi(30)
     private fun awaitNativeKeyboardAndStableBounds(matcher: SemanticsMatcher) {
         var lastBounds: Rect? = null
         var stableSince = SystemClock.elapsedRealtime()
@@ -35,6 +35,7 @@ class PracticeLibraryJourneyTest {
         println("Stable pointer target: ${compose.onNode(matcher).fetchSemanticsNode().boundsInRoot}")
     }
 
+    @SdkSuppress(minSdkVersion = 29)
     @Test fun actualRouteManualPracticeSurvivesRecreationWithoutCameraUseOrProgressionAward() = assertManualJourneyDoesNotUseCamera {
         compose.onNodeWithText("Search exercises").assertIsDisplayed()
         compose.waitForIdle()
@@ -69,6 +70,7 @@ class PracticeLibraryJourneyTest {
         capturePracticeEvidence("exercise-detail-normal")
     }
 
+    @SdkSuppress(minSdkVersion = 30)
     @Test fun libraryQueryAndFavoriteFilterSurviveMapAndActivityRecreation() {
         compose.onNodeWithTag("exercise-library-list").performScrollToIndex(0)
         compose.onNodeWithText("All").assertIsSelected()
