@@ -83,6 +83,7 @@ fun SkillDetailSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = SurfaceRaised,
+        contentColor = TextBright,
         dragHandle = { BottomSheetDefaults.DragHandle(color = OutlineSteel) }
     ) {
         Column(
