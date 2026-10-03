@@ -1,5 +1,11 @@
 name: Validate Android
 on:
+  workflow_dispatch:
+    inputs:
+      soak_minutes:
+        description: Synthetic empty-camera endurance minutes (0 through 30)
+        default: '0'
+        required: false
   pull_request:
   push:
     branches: [master]
@@ -8,7 +14,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -45,7 +51,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Synthetic emulator launch smoke
-        timeout-minutes: 20
+        timeout-minutes: 50
+        env:
+          SOAK_MINUTES: ${{ inputs.soak_minutes || '0' }}
         run: bash scripts/ci_android_smoke.sh
       - uses: actions/upload-artifact@v4
         if: always()

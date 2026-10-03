@@ -18,6 +18,11 @@ AVD_NAME=omnipose-ci
 SYSTEM_IMAGE='system-images;android-35;google_apis;x86_64'
 emulator_pid=
 recorder_pid=
+SOAK_MINUTES="${SOAK_MINUTES:-0}"
+if ! [[ "$SOAK_MINUTES" =~ ^([0-9]|[12][0-9]|30)$ ]]; then
+  echo "SOAK_MINUTES must be an integer from 0 through 30" >&2
+  exit 1
+fi
 
 cleanup() {
   local status=$?
@@ -95,15 +100,19 @@ timeout --kill-after=5s 10 "$ADB" shell getprop > evidence/device-properties.txt
 timeout --kill-after=5s 10 "$ADB" shell getconf PAGE_SIZE > evidence/page-size.txt
 timeout --kill-after=5s 120 "$ADB" install app/build/outputs/apk/debug/app-universal-debug.apk | tee evidence/install.txt
 timeout --kill-after=5s 10 "$ADB" logcat -c
-timeout --kill-after=5s 75 "$ADB" shell screenrecord --time-limit 60 /sdcard/journey.mp4 > evidence/screenrecord.log 2>&1 &
+# The APKs are already built. Install instrumentation before starting recording;
+# recording while Gradle prepares its connected task captured only the launcher.
+timeout --kill-after=5s 120 "$ADB" install app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk > evidence/test-install.txt
+timeout --kill-after=5s 190 "$ADB" shell screenrecord --time-limit 180 /sdcard/journey.mp4 > evidence/screenrecord.log 2>&1 &
 recorder_pid=$!
 
 # Keep real instrumentation mandatory. Readiness and cleanup are infrastructure gates,
 # never substitutes for the CameraX/ML Kit/reset/switch/exit assertions.
 # AGP 8.5.2 exposes this stable keep-installed option; retain the tested ABI APK
 # for identity capture/relaunch instead of reinstalling a different artifact.
-timeout --kill-after=5s 720 ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
+timeout --kill-after=5s "$((720 + SOAK_MINUTES * 60))" ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
   -Pkotlin.compiler.execution.strategy=in-process \
+  -Pandroid.testInstrumentationRunnerArguments.soakMinutes="$SOAK_MINUTES" \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true | tee evidence/instrumentation.txt
 wait "$recorder_pid"
 recorder_pid=
@@ -115,5 +124,9 @@ timeout --kill-after=5s 15 "$ADB" pull /sdcard/window.xml evidence/window.xml
 timeout --kill-after=5s 15 "$ADB" shell screencap -p /sdcard/screen.png
 timeout --kill-after=5s 15 "$ADB" pull /sdcard/screen.png evidence/screen.png
 timeout --kill-after=5s 15 "$ADB" logcat -d > evidence/logcat.txt
+timeout --kill-after=5s 30 "$ADB" pull /sdcard/Android/data/com.grloepr.pushtrack.codextest/files/evidence evidence/runtime-screens
+for screen in exercise-detail training-controls-empty-synthetic-camera training-paused synthetic-event-counter-one synthetic-event-target-dialog synthetic-event-after-target; do
+  test -s "evidence/runtime-screens/$screen.png"
+done
 ! grep -q 'FATAL EXCEPTION' evidence/logcat.txt
 
