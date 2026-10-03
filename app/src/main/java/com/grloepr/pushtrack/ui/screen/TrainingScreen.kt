@@ -280,7 +280,7 @@ fun TrainingScreen(
             ExerciseChip(node = node, plane = schema.optimalPlane)
             if (recoveredSession) {
                 Text("New session after restart - previous session counts were reset.",
-                    style = MaterialTheme.typography.bodySmall, color = SignalAmber)
+                    style = MaterialTheme.typography.bodySmall, color = SignalAmber, modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             }
             Text(
                 text = if (node.id == schema.id) {
@@ -298,7 +298,7 @@ fun TrainingScreen(
             } else if (cameraProvider == null) {
                 Text("Starting camera…", color = Color.White)
             } else if (cameraError) {
-                Text("Camera unavailable. Try switching camera or end this session.", color = SignalAmber)
+                Text("Camera unavailable. Try switching camera or end this session.", color = SignalAmber, modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             } else {
                 CameraAngleBanner(alignment = frame.alignment)
             }
@@ -306,7 +306,7 @@ fun TrainingScreen(
                 text = "Completed: ${frame.repCount}",
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.testTag("rep-status")
+                modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp).testTag("rep-status")
             )
         }
 

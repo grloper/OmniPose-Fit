@@ -10,6 +10,8 @@ fun captureRuntimeEvidence(name: String) {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val directory = requireNotNull(instrumentation.targetContext.getExternalFilesDir("evidence"))
     directory.mkdirs()
+    instrumentation.waitForIdleSync()
+    instrumentation.uiAutomation.waitForIdle(150L, 3000L)
     val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot()) { "Screenshot unavailable" }
     try {
         File(directory, "$name.png").outputStream().use {
