@@ -5,6 +5,9 @@ set -Eeuo pipefail
 : "${ANDROID_HOME:?Android SDK is required}"
 : "${RUNNER_TEMP:?A runner-local temporary directory is required}"
 mkdir -p evidence
+stage=initialization
+on_error() { local code=$1 command=$2; printf 'stage=%s\ncommand=%s\nexit=%s\n' "$stage" "$command" "$code" > evidence/failure.txt; return "$code"; }
+trap 'on_error "$?" "$BASH_COMMAND"' ERR
 export ANDROID_SDK_HOME="$RUNNER_TEMP/omnipose-sdk-user"
 export ANDROID_USER_HOME="$ANDROID_SDK_HOME/.android"
 export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
@@ -110,12 +113,21 @@ recorder_pid=$!
 # never substitutes for the CameraX/ML Kit/reset/switch/exit assertions.
 # AGP 8.5.2 exposes this stable keep-installed option; retain the tested ABI APK
 # for identity capture/relaunch instead of reinstalling a different artifact.
+stage=instrumentation
 timeout --kill-after=5s "$((720 + SOAK_MINUTES * 60))" ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
   -Pkotlin.compiler.execution.strategy=in-process \
   -Pandroid.testInstrumentationRunnerArguments.soakMinutes="$SOAK_MINUTES" \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true | tee evidence/instrumentation.txt
-wait "$recorder_pid"
+stage=optional-recording
+if wait "$recorder_pid"; then
+  if ! timeout --kill-after=5s 15 "$ADB" pull /sdcard/journey.mp4 evidence/journey.mp4 > evidence/video-pull.txt 2>&1; then
+    printf '{"available":false,"reason":"recorder artifact unavailable"}\n' > evidence/recording-unavailable.json
+  fi
+else
+  printf '{"available":false,"reason":"recorder exited unsuccessfully"}\n' > evidence/recording-unavailable.json
+fi
 recorder_pid=
+stage=launch
 timeout --kill-after=5s 30 "$ADB" shell am start -W -n com.grloepr.pushtrack.codextest/com.grloepr.pushtrack.MainActivity | tee evidence/launch.txt
 sleep 8
 timeout --kill-after=5s 10 "$ADB" shell pidof com.grloepr.pushtrack.codextest > evidence/pid.txt
@@ -124,9 +136,14 @@ timeout --kill-after=5s 15 "$ADB" pull /sdcard/window.xml evidence/window.xml
 timeout --kill-after=5s 15 "$ADB" shell screencap -p /sdcard/screen.png
 timeout --kill-after=5s 15 "$ADB" pull /sdcard/screen.png evidence/screen.png
 timeout --kill-after=5s 15 "$ADB" logcat -d > evidence/logcat.txt
+stage=mandatory-runtime-evidence
 timeout --kill-after=5s 30 "$ADB" pull /sdcard/Android/data/com.grloepr.pushtrack.codextest/files/evidence evidence/runtime-screens
 for screen in exercise-detail training-controls-empty-synthetic-camera training-paused synthetic-event-counter-one synthetic-event-target-dialog synthetic-event-after-target; do
   test -s "evidence/runtime-screens/$screen.png"
 done
-! grep -q 'FATAL EXCEPTION' evidence/logcat.txt
+stage=logcat-validation
+if grep -q 'FATAL EXCEPTION' evidence/logcat.txt; then
+  echo 'Runtime fatal exception found in logcat' >&2
+  false
+fi
 
