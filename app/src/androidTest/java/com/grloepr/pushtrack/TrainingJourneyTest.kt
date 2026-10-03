@@ -18,7 +18,7 @@ class TrainingJourneyTest {
 
     @Test fun skillTrainingResetSwitchAndExit() {
         compose.onNodeWithContentDescription("Wall Push-Up").performClick()
-        compose.onNodeWithText("Start motion tracking").performScrollTo().performClick()
+        compose.onNodeWithText("Start motion tracking").performClick()
         compose.waitUntil(15000) {
             compose.onAllNodesWithTag("rep-status").fetchSemanticsNodes().isNotEmpty()
         }
@@ -34,6 +34,13 @@ class TrainingJourneyTest {
         compose.onNodeWithText("Camera unavailable. Try switching camera or end this session.")
             .assertDoesNotExist()
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
+        compose.onNodeWithContentDescription("Pause tracking").performClick()
+        compose.onNodeWithText("Paused — completed counts are kept. Resume from the start posture.").assertExists()
+        compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
+        compose.onNodeWithContentDescription("Resume tracking").performClick()
+        val mute = compose.onAllNodesWithContentDescription("Mute training audio").fetchSemanticsNodes()
+        if (mute.isNotEmpty()) compose.onNodeWithContentDescription("Mute training audio").performClick()
+        compose.onNodeWithContentDescription("Enable training audio").assertExists()
         compose.onNodeWithContentDescription("Reset reps").performClick()
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
         compose.onNodeWithContentDescription("Switch camera").performClick()
@@ -50,5 +57,11 @@ class TrainingJourneyTest {
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
         compose.onNodeWithContentDescription("End session").performClick()
         compose.onNodeWithContentDescription("Wall Push-Up").assertExists()
+        compose.onNodeWithContentDescription("Wall Push-Up").performClick()
+        compose.onNodeWithText("Start motion tracking").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithTag("rep-status").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Enable training audio").assertExists()
+        compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
+        compose.onNodeWithContentDescription("End session").performClick()
     }
 }
