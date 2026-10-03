@@ -36,6 +36,9 @@ cleanup() {
   if timeout --kill-after=5s 5 "$ADB" get-state 2>/dev/null | grep -qx device; then
     timeout --kill-after=5s 15 "$ADB" logcat -d > evidence/logcat.txt 2>&1
     timeout --kill-after=5s 15 "$ADB" pull /sdcard/journey.mp4 evidence/journey.mp4 > evidence/video-pull.txt 2>&1
+    if [ ! -d evidence/practice-screens ]; then
+      timeout --kill-after=5s 15 "$ADB" pull /sdcard/Android/data/com.grloepr.pushtrack.codextest/files/practice-evidence evidence/practice-screens > evidence/practice-pull.txt 2>&1
+    fi
     timeout --kill-after=5s 10 "$ADB" emu kill > evidence/emulator-stop.txt 2>&1
   fi
   if [ -n "$recorder_pid" ]; then kill "$recorder_pid" 2>/dev/null; fi
@@ -114,7 +117,7 @@ recorder_pid=$!
 # AGP 8.5.2 exposes this stable keep-installed option; retain the tested ABI APK
 # for identity capture/relaunch instead of reinstalling a different artifact.
 stage=instrumentation
-timeout --kill-after=5s "$((720 + SOAK_MINUTES * 60))" ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
+timeout --kill-after=5s "$((1200 + SOAK_MINUTES * 60))" ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2 \
   -Pkotlin.compiler.execution.strategy=in-process \
   -Pandroid.testInstrumentationRunnerArguments.soakMinutes="$SOAK_MINUTES" \
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true | tee evidence/instrumentation.txt
@@ -141,9 +144,15 @@ timeout --kill-after=5s 30 "$ADB" pull /sdcard/Android/data/com.grloepr.pushtrac
 for screen in exercise-detail training-controls-empty-synthetic-camera training-paused synthetic-event-counter-one synthetic-event-target-dialog synthetic-event-after-target; do
   test -s "evidence/runtime-screens/$screen.png"
 done
+stage=mandatory-practice-evidence
+timeout --kill-after=5s 30 "$ADB" pull /sdcard/Android/data/com.grloepr.pushtrack.codextest/files/practice-evidence evidence/practice-screens
+for screen in library-normal manual-normal exercise-detail-normal library-font2 manual-font2-keyboard manual-font2-controls; do
+  test -s "evidence/practice-screens/$screen.png"
+done
 stage=logcat-validation
 if grep -q 'FATAL EXCEPTION' evidence/logcat.txt; then
   echo 'Runtime fatal exception found in logcat' >&2
   false
 fi
+
 

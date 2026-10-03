@@ -14,7 +14,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,7 +53,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Synthetic emulator launch smoke
-        timeout-minutes: 50
+        timeout-minutes: 60
         env:
           SOAK_MINUTES: ${{ inputs.soak_minutes || '0' }}
         run: bash scripts/ci_android_smoke.sh
@@ -70,4 +70,17 @@ jobs:
             app/build/reports/androidTests/
             app/build/reports/lint-results-debug.*
             evidence/
-
+      - name: Upload compact runtime evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: OmniPose-runtime-evidence
+          path: |
+            evidence/runtime-screens/**/*.png
+            evidence/practice-screens/**/*.png
+            evidence/instrumentation.txt
+            evidence/failure.txt
+            evidence/logcat.txt
+            evidence/smoke-exit-code.txt
+            evidence/prepush-snapshot.json
+            app/build/outputs/androidTest-results/**/TEST-*.xml

@@ -17,6 +17,7 @@ class TrainingJourneyTest {
     }
 
     @Test fun skillTrainingResetSwitchAndExit() {
+        compose.onNodeWithText("Map view").performClick()
         compose.onNodeWithContentDescription("Wall Push-Up").performClick()
         compose.waitForIdle()
         captureRuntimeEvidence("exercise-detail")
@@ -62,6 +63,7 @@ class TrainingJourneyTest {
             .assertDoesNotExist()
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
         compose.onNodeWithContentDescription("End session").performClick()
+        compose.onNodeWithText("Map view").performClick()
         compose.onNodeWithContentDescription("Wall Push-Up").assertExists()
         compose.onNodeWithContentDescription("Wall Push-Up").performClick()
         compose.onNodeWithText("Start motion tracking").performClick()

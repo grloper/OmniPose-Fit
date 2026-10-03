@@ -54,15 +54,26 @@ with tempfile.TemporaryDirectory(prefix='omni-smoke-test-') as tmp:
      for name in exercise-detail training-controls-empty-synthetic-camera training-paused synthetic-event-counter-one synthetic-event-target-dialog synthetic-event-after-target; do
        if [ "$name" != "${MISSING_SCREEN:-none}" ]; then printf png > "$dest/$name.png"; fi
      done
+   elif [[ "$*" == *"files/practice-evidence"* ]]; then
+     mkdir -p "$dest"
+     for name in library-normal manual-normal exercise-detail-normal library-font2 manual-font2-keyboard manual-font2-controls; do
+       if [ "$name" != "${MISSING_PRACTICE_SCREEN:-none}" ]; then printf png > "$dest/$name.png"; fi
+     done
    else printf fixture > "$dest"; fi;;
 esac
 exit 0
 ''')
- for label, extra, expected in [('happy',{},0),('recorder-unavailable',{'RECORDER_EXIT':'7'},0),('missing-required-png',{'MISSING_SCREEN':'training-paused'},1),('fatal-logcat',{'FATAL_LOG':'1'},1)]:
+ for label, extra, expected in [('happy',{},0),('recorder-unavailable',{'RECORDER_EXIT':'7'},0),('missing-required-png',{'MISSING_SCREEN':'training-paused'},1),('missing-required-practice-png',{'MISSING_PRACTICE_SCREEN':'manual-font2-keyboard'},1),('fatal-logcat',{'FATAL_LOG':'1'},1)]:
   import shutil
   shutil.rmtree(root/'evidence',ignore_errors=True)
   result=subprocess.run([os.environ.get('TEST_BASH','bash'),script.as_posix()],cwd=root,env=dict(env,**extra),text=True,capture_output=True,timeout=15)
   assert result.returncode==expected,(label,result.returncode,result.stderr)
   if label=='recorder-unavailable': assert (root/'evidence/recording-unavailable.json').is_file()
   if expected: assert (root/'evidence/failure.txt').is_file(),label
+  if label=='missing-required-practice-png':
+   failure=(root/'evidence/failure.txt').read_text()
+   assert 'stage=mandatory-practice-evidence' in failure,failure
+   assert 'test -s' in failure,failure
+   assert not (root/'evidence/practice-screens/manual-font2-keyboard.png').exists()
+   assert (root/'evidence/runtime-screens/training-paused.png').is_file()
   print('PASS',label)
