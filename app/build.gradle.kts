@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
     testImplementation(libs.mockk)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
