@@ -107,9 +107,9 @@ timeout --kill-after=5s 720 ./gradlew connectedDebugAndroidTest --no-daemon --ma
   -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true | tee evidence/instrumentation.txt
 wait "$recorder_pid"
 recorder_pid=
-timeout --kill-after=5s 30 "$ADB" shell am start -W -n com.grloepr.pushtrack/.MainActivity | tee evidence/launch.txt
+timeout --kill-after=5s 30 "$ADB" shell am start -W -n com.grloepr.pushtrack.codextest/com.grloepr.pushtrack.MainActivity | tee evidence/launch.txt
 sleep 8
-timeout --kill-after=5s 10 "$ADB" shell pidof com.grloepr.pushtrack > evidence/pid.txt
+timeout --kill-after=5s 10 "$ADB" shell pidof com.grloepr.pushtrack.codextest > evidence/pid.txt
 timeout --kill-after=5s 30 "$ADB" shell uiautomator dump /sdcard/window.xml
 timeout --kill-after=5s 15 "$ADB" pull /sdcard/window.xml evidence/window.xml
 timeout --kill-after=5s 15 "$ADB" shell screencap -p /sdcard/screen.png

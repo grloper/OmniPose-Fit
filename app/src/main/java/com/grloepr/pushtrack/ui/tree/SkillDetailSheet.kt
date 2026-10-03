@@ -323,8 +323,14 @@ private fun CallToAction(
                 ) {
                     Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Complete the prerequisites to unlock", modifier = Modifier.padding(vertical = 6.dp))
+                    Text("Suggested practice order", modifier = Modifier.padding(vertical = 6.dp))
                 }
+                Text(
+                    "Camera tracking cannot verify every prerequisite. Opening practice does not record completion or award XP.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
                 Spacer(modifier = Modifier.height(10.dp))
                 OutlinedButton(
                     onClick = onSkipUnlock,
@@ -335,7 +341,7 @@ private fun CallToAction(
                     Icon(Icons.Rounded.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Skip requirements & unlock",
+                        text = "Open practice anyway",
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(vertical = 6.dp)
                     )

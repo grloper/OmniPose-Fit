@@ -18,7 +18,7 @@ class TrainingEnduranceTest {
 
     @Before fun grantSyntheticCamera() {
         val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("pm grant com.grloepr.pushtrack android.permission.CAMERA")
+            .executeShellCommand("pm grant ${InstrumentationRegistry.getInstrumentation().targetContext.packageName} android.permission.CAMERA")
         ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
     }
 

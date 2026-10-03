@@ -13,7 +13,7 @@ class TrainingJourneyTest {
 
     @Before fun grantSyntheticCamera() {
         InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("pm grant com.grloepr.pushtrack android.permission.CAMERA").close()
+            .executeShellCommand("pm grant ${InstrumentationRegistry.getInstrumentation().targetContext.packageName} android.permission.CAMERA").close()
     }
 
     @Test fun skillTrainingResetSwitchAndExit() {
