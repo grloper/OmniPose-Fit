@@ -9,6 +9,7 @@ import java.io.File
 internal fun capturePracticeEvidence(name: String) {
     if (!Build.FINGERPRINT.contains("generic") && !Build.FINGERPRINT.contains("emulator") &&
         !Build.MODEL.contains("sdk", ignoreCase = true) && Build.HARDWARE !in setOf("ranchu", "goldfish")) return
+    require(name.matches(Regex("[a-z0-9-]+")))
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "practice-evidence").apply { mkdirs() }
     instrumentation.waitForIdleSync()

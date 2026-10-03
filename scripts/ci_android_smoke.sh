@@ -36,6 +36,7 @@ cleanup() {
   if timeout --kill-after=5s 5 "$ADB" get-state 2>/dev/null | grep -qx device; then
     timeout --kill-after=5s 15 "$ADB" logcat -d > evidence/logcat.txt 2>&1
     timeout --kill-after=5s 15 "$ADB" pull /sdcard/journey.mp4 evidence/journey.mp4 > evidence/video-pull.txt 2>&1
+    timeout --kill-after=5s 15 "$ADB" pull /sdcard/Android/data/com.grloepr.pushtrack.codextest/files/practice-evidence evidence/practice-screens > evidence/practice-pull.txt 2>&1
     timeout --kill-after=5s 10 "$ADB" emu kill > evidence/emulator-stop.txt 2>&1
   fi
   if [ -n "$recorder_pid" ]; then kill "$recorder_pid" 2>/dev/null; fi
@@ -140,6 +141,11 @@ stage=mandatory-runtime-evidence
 timeout --kill-after=5s 30 "$ADB" pull /sdcard/Android/data/com.grloepr.pushtrack.codextest/files/evidence evidence/runtime-screens
 for screen in exercise-detail training-controls-empty-synthetic-camera training-paused synthetic-event-counter-one synthetic-event-target-dialog synthetic-event-after-target; do
   test -s "evidence/runtime-screens/$screen.png"
+done
+stage=mandatory-practice-evidence
+timeout --kill-after=5s 30 "$ADB" pull /sdcard/Android/data/com.grloepr.pushtrack.codextest/files/practice-evidence evidence/practice-screens
+for screen in library-normal manual-normal exercise-detail-normal library-font2 manual-font2-keyboard manual-font2-controls; do
+  test -s "evidence/practice-screens/$screen.png"
 done
 stage=logcat-validation
 if grep -q 'FATAL EXCEPTION' evidence/logcat.txt; then
