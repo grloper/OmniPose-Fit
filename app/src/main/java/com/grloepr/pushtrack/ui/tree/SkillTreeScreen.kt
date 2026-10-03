@@ -105,7 +105,7 @@ fun SkillTreeScreen(
 ) {
     var inspectedNode by remember { mutableStateOf<SkillNode?>(null) }
     var privacyVisible by remember { mutableStateOf(false) }
-    var listView by rememberSaveable { mutableStateOf(false) }
+    var listView by rememberSaveable { mutableStateOf(true) }
     val horizontalPosition = rememberScrollState()
     val navigationScope = rememberCoroutineScope()
     val laneWidthPx = with(LocalDensity.current) { ColumnWidth.toPx() }
@@ -151,7 +151,7 @@ fun SkillTreeScreen(
         TreeHeader(treeState)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = { privacyVisible = true }) { Text("Privacy and tracking") }
-            TextButton(onClick = { listView = !listView }) { Text(if (listView) "Map view" else "List view") }
+            TextButton(onClick = { listView = !listView }) { Text(if (listView) "Map view" else "Exercise library") }
         }
 
         if (!listView) {
@@ -166,21 +166,7 @@ fun SkillTreeScreen(
                 color = TextMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
         }
         if (listView) {
-            Column(Modifier.weight(1f).navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-                CalisthenicsSkillGraph.nodes.forEach { node ->
-                    val status = treeState.statusOf(node)
-                    TextButton(onClick = { inspectedNode = node }, modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.fillMaxWidth()) {
-                            Text(node.title, style = MaterialTheme.typography.titleSmall, color = TextBright)
-                            Text("${node.branch.label} · ${when (status) {
-                                SkillStatus.LOCKED -> "Prerequisites pending"
-                                SkillStatus.AVAILABLE -> "Ready to practice"
-                                SkillStatus.MASTERED -> "Practice target completed"
-                            }}", style = MaterialTheme.typography.bodySmall, color = TextMuted)
-                        }
-                    }
-                }
-            }
+            PracticeLibraryScreen(onInspect = { inspectedNode = it }, modifier = Modifier.weight(1f))
         } else Box(
             modifier = Modifier
                 .weight(1f)

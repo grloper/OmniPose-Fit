@@ -11,9 +11,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,17 +53,24 @@ fun ExercisePreviewPlayer(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var playing by rememberSaveable(assetUri) { mutableStateOf(false) }
     val exoPlayer = remember(assetUri) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(assetUri))
             repeatMode = Player.REPEAT_MODE_ALL
             volume = 0f
             prepare()
-            playWhenReady = true
+            playWhenReady = false
         }
     }
-    DisposableEffect(exoPlayer) {
-        onDispose { exoPlayer.release() }
+    LaunchedEffect(playing, exoPlayer) { exoPlayer.playWhenReady = playing }
+    DisposableEffect(exoPlayer, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) { playing = false; exoPlayer.pause() }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer); exoPlayer.release() }
     }
 
     Box(
@@ -76,6 +92,11 @@ fun ExercisePreviewPlayer(
             update = { view -> view.player = exoPlayer },
             modifier = Modifier.fillMaxSize()
         )
+
+        TextButton(onClick = { playing = !playing }, modifier = Modifier.align(Alignment.BottomStart)
+            .background(AbyssBlack.copy(alpha = 0.8f))) {
+            Text(if (playing) "Pause illustrated preview" else "Play illustrated preview")
+        }
 
         Text(
             text = "ILLUSTRATED PREVIEW",
