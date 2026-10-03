@@ -17,11 +17,13 @@ class PracticeLibraryJourneyTest {
     ).bufferedReader().use { it.readText() }
 
     @Test fun actualRouteManualPracticeSurvivesRecreationWithoutCameraUseOrProgressionAward() {
+        capturePracticeEvidence("library-normal")
         val permissionBefore = context.checkSelfPermission(Manifest.permission.CAMERA)
         val appOpBefore = cameraAppOp()
         val progressBefore = context.getSharedPreferences("omnipose_progression", 0).all.toMap()
         compose.onNodeWithText("Search exercises").performTextInput("Wall Push-Up")
         compose.onNodeWithText("Manual practice").performScrollTo().performClick()
+        capturePracticeEvidence("manual-normal")
         compose.onNodeWithText("Seconds held").performScrollTo().performClick()
         compose.onNode(hasText("Personal goal", substring = true) and hasSetTextAction()).performScrollTo().performTextClearance()
         compose.onNode(hasText("Personal goal", substring = true) and hasSetTextAction()).performTextInput("2")
@@ -38,6 +40,14 @@ class PracticeLibraryJourneyTest {
         assertEquals(permissionBefore, context.checkSelfPermission(Manifest.permission.CAMERA))
         assertEquals(appOpBefore, cameraAppOp())
         assertEquals(progressBefore, context.getSharedPreferences("omnipose_progression", 0).all.toMap())
+    }
+
+
+    @Test fun illustratedExerciseDetailEvidence() {
+        compose.onNodeWithText("Search exercises").performTextInput("Wall Push-Up")
+        compose.onNodeWithText("Preview & tracking").performScrollTo().performClick()
+        compose.onNodeWithText("Play illustrated preview").assertExists()
+        capturePracticeEvidence("exercise-detail-normal")
     }
 
     @Test fun libraryQueryAndFavoriteFilterSurviveMapAndActivityRecreation() {

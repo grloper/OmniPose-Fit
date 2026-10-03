@@ -1,0 +1,18 @@
+package com.grloepr.pushtrack
+
+import android.graphics.Bitmap
+import android.os.Build
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+
+/** Captures only the synthetic test UI on an emulator, including dialog/IME windows. */
+internal fun capturePracticeEvidence(name: String) {
+    if (!Build.FINGERPRINT.contains("generic") && !Build.FINGERPRINT.contains("emulator") &&
+        !Build.MODEL.contains("sdk", ignoreCase = true) && Build.HARDWARE !in setOf("ranchu", "goldfish")) return
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+    val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "practice-evidence").apply { mkdirs() }
+    val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+    File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    bitmap.recycle()
+    println("Practice screenshot: ${File(directory, "$name.png").absolutePath}")
+}

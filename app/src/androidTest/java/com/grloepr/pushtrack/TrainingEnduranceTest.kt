@@ -47,7 +47,13 @@ class TrainingEnduranceTest {
             .assertDoesNotExist()
     }
 
+    private fun ensureMapView() {
+        if (compose.onAllNodesWithText("Map view").fetchSemanticsNodes().isNotEmpty())
+            compose.onNodeWithText("Map view").performClick()
+    }
+
     private fun enterTraining() {
+        ensureMapView()
         compose.onNodeWithContentDescription("Wall Push-Up").performClick()
         compose.onNodeWithText("Start motion tracking").performClick()
         awaitCamera()
@@ -63,6 +69,7 @@ class TrainingEnduranceTest {
             compose.onNodeWithContentDescription("Resume tracking").performClick()
             awaitCamera()
             compose.onNodeWithContentDescription("End session").performClick()
+            ensureMapView()
             compose.onNodeWithContentDescription("Wall Push-Up").assertExists()
         }
     }
