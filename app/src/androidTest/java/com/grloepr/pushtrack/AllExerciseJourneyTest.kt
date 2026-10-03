@@ -56,6 +56,8 @@ class AllExerciseJourneyTest {
     @Test fun allNineteenDetailsAndManualUnitsResetEndReopenWithoutCameraOrXp() = assertManualJourneyDoesNotUseCamera {
         val progressionBefore = context.getSharedPreferences("omnipose_progression", 0).all.toMap()
         assertEquals(19, CalisthenicsSkillGraph.nodes.size)
+        compose.onNodeWithText("Search exercises").assertIsDisplayed()
+        compose.waitForIdle()
         capturePracticeEvidence("all-exercises-library-production-theme")
         for (node in CalisthenicsSkillGraph.nodes) {
             selectExercise(node)

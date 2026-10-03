@@ -13,10 +13,14 @@ class PracticeLibraryJourneyTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     @SdkSuppress(minSdkVersion = 29)
     @Test fun actualRouteManualPracticeSurvivesRecreationWithoutCameraUseOrProgressionAward() = assertManualJourneyDoesNotUseCamera {
+        compose.onNodeWithText("Search exercises").assertIsDisplayed()
+        compose.waitForIdle()
         capturePracticeEvidence("library-normal")
         val progressBefore = context.getSharedPreferences("omnipose_progression", 0).all.toMap()
         compose.onNodeWithText("Search exercises").performTextInput("Wall Push-Up")
         compose.onNodeWithText("Manual practice").performScrollTo().performClick()
+        compose.onNodeWithText("Report 1 repetition").performScrollTo().assertIsDisplayed()
+        compose.waitForIdle()
         capturePracticeEvidence("manual-normal")
         compose.onNodeWithText("Seconds held").performScrollTo().performClick()
         compose.onNode(hasText("Personal goal", substring = true) and hasSetTextAction()).performScrollTo().performTextClearance()
