@@ -18,6 +18,8 @@ class TrainingJourneyTest {
 
     @Test fun skillTrainingResetSwitchAndExit() {
         compose.onNodeWithContentDescription("Wall Push-Up").performClick()
+        compose.waitForIdle()
+        captureRuntimeEvidence("exercise-detail")
         compose.onNodeWithText("Start motion tracking").performClick()
         compose.waitUntil(15000) {
             compose.onAllNodesWithTag("rep-status").fetchSemanticsNodes().isNotEmpty()
@@ -34,9 +36,13 @@ class TrainingJourneyTest {
         compose.onNodeWithText("Camera unavailable. Try switching camera or end this session.")
             .assertDoesNotExist()
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
+        compose.waitForIdle()
+        captureRuntimeEvidence("training-controls-empty-synthetic-camera")
         compose.onNodeWithContentDescription("Pause tracking").performClick()
         compose.onNodeWithText("Paused — completed counts are kept. Resume from the start posture.").assertExists()
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
+        compose.waitForIdle()
+        captureRuntimeEvidence("training-paused")
         compose.onNodeWithContentDescription("Resume tracking").performClick()
         val mute = compose.onAllNodesWithContentDescription("Mute training audio").fetchSemanticsNodes()
         if (mute.isNotEmpty()) compose.onNodeWithContentDescription("Mute training audio").performClick()

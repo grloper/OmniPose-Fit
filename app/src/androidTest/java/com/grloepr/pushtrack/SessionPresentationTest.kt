@@ -40,6 +40,8 @@ class SessionPresentationTest {
             }
         }
         emit(1, 100)
+        compose.waitForIdle()
+        captureRuntimeEvidence("synthetic-event-counter-one")
         compose.onNodeWithTag("session-counter").assert(SemanticsMatcher.expectValue(
             androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "1 completed of 2"))
         compose.runOnIdle { assertNull(controller.accept(frame.copy(timestampMs = 200, repDelta = 0), false, true)) }
@@ -47,7 +49,11 @@ class SessionPresentationTest {
             androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "1 completed of 2"))
         emit(2, 300)
         compose.onNodeWithText("Session target reached").assertIsDisplayed()
+        compose.waitForIdle()
+        captureRuntimeEvidence("synthetic-event-target-dialog")
         compose.onNodeWithText("Keep practicing").performClick()
+        compose.waitForIdle()
+        captureRuntimeEvidence("synthetic-event-after-target")
         compose.runOnIdle { controller.reset(); frame = EngineFrame.idle(400); controller.accept(frame, true, true) }
         emit(1, 500); emit(2, 600)
         compose.onNodeWithText("Session target reached").assertIsDisplayed()
