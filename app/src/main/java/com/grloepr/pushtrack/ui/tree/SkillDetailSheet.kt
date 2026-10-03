@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grloepr.pushtrack.anatomy.InteractiveAnatomyPanel
 import com.grloepr.pushtrack.media.PreviewAssets
+import com.grloepr.pushtrack.practice.MotionTrackingLimitations
 import com.grloepr.pushtrack.ui.components.ExercisePreviewPlayer
 import com.grloepr.pushtrack.progression.CalisthenicsSkillGraph
 import com.grloepr.pushtrack.progression.SkillNode
@@ -115,6 +116,10 @@ fun SkillDetailSheet(
                 lineHeight = 20.sp
             )
 
+            Spacer(modifier = Modifier.height(20.dp))
+            SectionLabel("Motion tracking limitations")
+            Text(MotionTrackingLimitations.forExercise(node), style = MaterialTheme.typography.bodyMedium,
+                color = TextMuted, modifier = Modifier.padding(top = 8.dp), lineHeight = 20.sp)
             Spacer(modifier = Modifier.height(20.dp))
             SectionLabel("Target muscles")
             Spacer(modifier = Modifier.height(6.dp))

@@ -68,7 +68,7 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
                         Text(node.title, style = MaterialTheme.typography.titleMedium)
                         Text("${node.branch.label} · Difficulty ${node.difficulty}/5", style = MaterialTheme.typography.bodySmall)
                         Text(node.description, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
-                        Text(if(node.schemaId == node.id) "Experimental camera motion estimate; technique is not verified."
+                        Text(if(node.schemaId == node.id) "Experimental joint-position estimate; technique is not verified."
                             else "Camera uses a shared motion model; this variation is not independently verified.",
                             style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
                         Column(Modifier.fillMaxWidth()) {
