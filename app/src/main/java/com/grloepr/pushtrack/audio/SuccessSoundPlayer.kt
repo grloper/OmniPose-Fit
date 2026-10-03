@@ -44,31 +44,37 @@ class SuccessSoundPlayer(context: Context) {
     }
 
     @Suppress("DEPRECATION")
-    fun play(cue: CompletionCue) {
-        val sound = when (cue) { CompletionCue.TARGET -> target; CompletionCue.TEMPO -> tick; else -> rep }
-        val now = SystemClock.elapsedRealtime()
-        if (sound !in ready || !playbackWindow.eligible(cue, now)) return
-        stop()
-        val granted = runCatching {
-            if (Build.VERSION.SDK_INT >= 26) manager.requestAudioFocus(requireNotNull(focusRequest))
-            else manager.requestAudioFocus(listener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-        }.getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
-        if (granted != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return
-        playbackWindow.played(cue, now)
-        val volume = if (cue == CompletionCue.TEMPO) 0.18f else 0.35f
-        stream = runCatching { pool?.play(sound, volume, volume, 1, 0, 1f) ?: 0 }.getOrDefault(0)
-        if (stream == 0) stop() else handler.postDelayed(endCue, 500L)
-    }
+    private fun requestFocus(): Boolean = runCatching {
+        if (Build.VERSION.SDK_INT >= 26) manager.requestAudioFocus(requireNotNull(focusRequest))
+        else manager.requestAudioFocus(listener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+    }.getOrDefault(AudioManager.AUDIOFOCUS_REQUEST_FAILED) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
 
     @Suppress("DEPRECATION")
-    fun stop() {
-        handler.removeCallbacks(endCue)
-        runCatching { if (stream != 0) pool?.stop(stream) }
-        stream = 0
+    private fun abandonFocus() {
         runCatching {
             if (Build.VERSION.SDK_INT >= 26) manager.abandonAudioFocusRequest(requireNotNull(focusRequest))
             else manager.abandonAudioFocus(listener)
         }
     }
-    fun release() { stop(); pool?.release(); pool = null; ready.clear() }
+    private fun haltStream() {
+        handler.removeCallbacks(endCue)
+        runCatching { if (stream != 0) pool?.stop(stream) }
+        stream = 0
+    }
+    private val playback = FocusPlayback(::requestFocus, ::abandonFocus, { cue ->
+        val sound = when (cue) { CompletionCue.TARGET -> target; CompletionCue.TEMPO -> tick; else -> rep }
+        val volume = if (cue == CompletionCue.TEMPO) 0.18f else 0.35f
+        stream = runCatching { pool?.play(sound, volume, volume, 1, 0, 1f) ?: 0 }.getOrDefault(0)
+        if (stream != 0) handler.postDelayed(endCue, 500L)
+        stream != 0
+    }, ::haltStream)
+
+    fun play(cue: CompletionCue) {
+        val sound = when (cue) { CompletionCue.TARGET -> target; CompletionCue.TEMPO -> tick; else -> rep }
+        val now = SystemClock.elapsedRealtime()
+        if (sound !in ready || !playbackWindow.eligible(cue, now)) return
+        if (playback.play(cue)) playbackWindow.played(cue, now)
+    }
+    fun stop() = playback.stop()
+    fun release() { playback.release(); pool?.release(); pool = null; ready.clear() }
 }

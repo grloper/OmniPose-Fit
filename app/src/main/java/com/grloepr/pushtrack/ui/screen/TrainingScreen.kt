@@ -63,7 +63,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.grloepr.pushtrack.analysis.ImageAnalyzer
 import com.grloepr.pushtrack.analysis.PoseDetectionResult
 import com.grloepr.pushtrack.audio.CompletionCue
-import com.grloepr.pushtrack.audio.SessionFeedback
+import com.grloepr.pushtrack.audio.SessionOutcomeController
 import com.grloepr.pushtrack.audio.SuccessSoundPlayer
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
@@ -128,24 +128,24 @@ fun TrainingScreen(
     var poseResult by remember { mutableStateOf<PoseDetectionResult?>(null) }
     var frame by remember { mutableStateOf(EngineFrame.idle()) }
     var celebrationVisible by remember { mutableStateOf(false) }
-    var masteryFired by remember { mutableStateOf(alreadyMastered) }
     var newlyUnlocked by remember { mutableStateOf(false) }
     var showPartialHint by remember { mutableStateOf(false) }
     var completionPulse by remember { mutableStateOf(0) }
     val repFlash = remember { Animatable(0f) }
-    val feedback = remember(schema, node) { SessionFeedback(node.masteryReps, schema.isHold) }
+    val feedback = remember(schema, node) { SessionOutcomeController(node.masteryReps, schema.isHold, node.id == schema.id, alreadyMastered) }
     val engine = remember(schema, node) {
         DynamicExerciseEngine(schema) { emitted ->
             frame = emitted
-            val event = feedback.accept(emitted, sessionActive && !paused, soundOn)
+            val outcome = feedback.accept(emitted, sessionActive && !paused, soundOn)
+            val event = outcome?.feedback
             if (event != null) {
                 completionPulse += 1
                 if (event.audible) {
                     successPlayer.play(event.cue)
                 }
                 if (event.cue == CompletionCue.TARGET) {
-                    newlyUnlocked = node.id == schema.id && !masteryFired
-                    if (newlyUnlocked) { masteryFired = true; onMastered() }
+                    newlyUnlocked = requireNotNull(outcome).awardProgress
+                    if (newlyUnlocked) onMastered()
                     celebrationVisible = true
                 }
             }
