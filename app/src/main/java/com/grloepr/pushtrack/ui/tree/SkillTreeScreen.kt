@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,8 +40,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.grloepr.pushtrack.progression.CalisthenicsSkillGraph
 import com.grloepr.pushtrack.progression.SkillBranch
 import com.grloepr.pushtrack.progression.SkillNode
@@ -77,8 +83,8 @@ import com.grloepr.pushtrack.ui.theme.TextFaint
 import com.grloepr.pushtrack.ui.theme.TextMuted
 
 // ── Layout constants for the progression map grid ───────────────────────────
-private val ColumnWidth = 106.dp
-private val RowHeight = 156.dp
+private val ColumnWidth = 120.dp
+private val RowHeight = 176.dp
 private val NodeSize = 70.dp
 private val GridPaddingH = 20.dp
 private val GridPaddingTop = 40.dp
@@ -99,6 +105,10 @@ fun SkillTreeScreen(
 ) {
     var inspectedNode by remember { mutableStateOf<SkillNode?>(null) }
     var privacyVisible by remember { mutableStateOf(false) }
+    var listView by rememberSaveable { mutableStateOf(false) }
+    val horizontalPosition = rememberScrollState()
+    val navigationScope = rememberCoroutineScope()
+    val laneWidthPx = with(LocalDensity.current) { ColumnWidth.toPx() }
 
     if (privacyVisible) {
         AlertDialog(
@@ -139,13 +149,44 @@ fun SkillTreeScreen(
             .statusBarsPadding()
     ) {
         TreeHeader(treeState)
-        TextButton(onClick = { privacyVisible = true }) { Text("Privacy and tracking") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = { privacyVisible = true }) { Text("Privacy and tracking") }
+            TextButton(onClick = { listView = !listView }) { Text(if (listView) "Map view" else "List view") }
+        }
 
-        Box(
+        if (!listView) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+                SkillBranch.entries.forEach { branch ->
+                    TextButton(onClick = {
+                        navigationScope.launch { horizontalPosition.animateScrollTo((laneWidthPx * branch.lane).toInt()) }
+                    }) { Text(branch.label) }
+                }
+            }
+            Text("Choose a branch above or swipe the map sideways", style = MaterialTheme.typography.bodySmall,
+                color = TextMuted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+        }
+        if (listView) {
+            Column(Modifier.weight(1f).navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+                CalisthenicsSkillGraph.nodes.forEach { node ->
+                    val status = treeState.statusOf(node)
+                    TextButton(onClick = { inspectedNode = node }, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(node.title, style = MaterialTheme.typography.titleSmall, color = TextBright)
+                            Text("${node.branch.label} · ${when (status) {
+                                SkillStatus.LOCKED -> "Prerequisites pending"
+                                SkillStatus.AVAILABLE -> "Ready to practice"
+                                SkillStatus.MASTERED -> "Practice target completed"
+                            }}", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+                        }
+                    }
+                }
+            }
+        } else Box(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
-                .horizontalScroll(rememberScrollState())
+                .horizontalScroll(horizontalPosition)
         ) {
             SkillGraphCanvas(
                 treeState = treeState,
@@ -180,7 +221,7 @@ private fun TreeHeader(treeState: SkillTreeState) {
                     text = "OMNIPOSE",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 3.sp,
+                    letterSpacing = 1.sp,
                     color = TextBright
                 )
                 Text(
@@ -208,14 +249,15 @@ private fun TreeHeader(treeState: SkillTreeState) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "${treeState.xpIntoLevel} / ${SkillTreeState.XP_PER_LEVEL} XP · " +
-                        "${treeState.masteredCount} of ${treeState.totalSkills} skills mastered",
+                        "${treeState.masteredCount} of ${treeState.totalSkills} practice targets completed",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextMuted
                 )
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Legend()
+
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Legend()
     }
 }
 
@@ -258,10 +300,10 @@ private fun LevelRing(level: Int, progress: Float) {
 
 @Composable
 private fun Legend() {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         LegendRow(color = TextFaint, label = "Locked")
         LegendRow(color = ElectricCyan, label = "Ready")
-        LegendRow(color = AchievementGold, label = "Mastered")
+        LegendRow(color = AchievementGold, label = "Completed")
     }
 }
 
@@ -295,16 +337,7 @@ private fun SkillGraphCanvas(
     val contentHeight = GridPaddingTop + GridPaddingBottom +
         RowHeight * (CalisthenicsSkillGraph.maxTier + 1)
 
-    val infinite = rememberInfiniteTransition(label = "edgeFlow")
-    val dashPhase by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 48f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "edgeDashPhase"
-    )
+    val dashPhase = 0f
 
     Box(
         modifier = Modifier
@@ -318,7 +351,7 @@ private fun SkillGraphCanvas(
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp,
-                color = TextFaint,
+                color = TextMuted,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .offset(x = GridPaddingH + ColumnWidth * branch.lane, y = 8.dp)
@@ -426,7 +459,7 @@ private fun SkillNodeItem(
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = when (status) {
-                SkillStatus.LOCKED -> TextFaint
+                SkillStatus.LOCKED -> TextMuted
                 SkillStatus.AVAILABLE -> TextBright
                 SkillStatus.MASTERED -> AchievementGold
             },
@@ -442,16 +475,7 @@ private fun SkillNodeItem(
 /** Pulsing "ready to unlock" ring — the tree's call to action. */
 @Composable
 private fun AvailableNodeAura() {
-    val infinite = rememberInfiniteTransition(label = "availableAura")
-    val ring by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "availableRing"
-    )
+    val ring = 0.25f
     Canvas(modifier = Modifier.size(NodeSize + 34.dp)) {
         val baseRadius = NodeSize.toPx() / 2f
         val expand = baseRadius * (1f + 0.42f * ring)
@@ -470,16 +494,7 @@ private fun AvailableNodeAura() {
 /** Steady gold halo for mastered skills. */
 @Composable
 private fun MasteredNodeAura() {
-    val infinite = rememberInfiniteTransition(label = "masteredAura")
-    val breath by infinite.animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1900),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "masteredBreath"
-    )
+    val breath = 0.75f
     Canvas(modifier = Modifier.size(NodeSize + 34.dp)) {
         drawCircle(
             brush = Brush.radialGradient(
@@ -499,16 +514,7 @@ private fun NodeDisc(
     status: SkillStatus,
     onClick: () -> Unit
 ) {
-    val infinite = rememberInfiniteTransition(label = "nodeBreath")
-    val breathScale by infinite.animateFloat(
-        initialValue = 1f,
-        targetValue = if (status == SkillStatus.AVAILABLE) 1.045f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "nodeBreathScale"
-    )
+    val breathScale = 1f
 
     val background = when (status) {
         SkillStatus.LOCKED -> Brush.verticalGradient(
@@ -527,7 +533,7 @@ private fun NodeDisc(
         SkillStatus.MASTERED -> AchievementGold
     }
     val iconTint = when (status) {
-        SkillStatus.LOCKED -> TextFaint
+        SkillStatus.LOCKED -> TextMuted
         SkillStatus.AVAILABLE -> TextBright
         SkillStatus.MASTERED -> DeepSpace
     }
@@ -539,7 +545,13 @@ private fun NodeDisc(
             .clip(CircleShape)
             .background(background, CircleShape)
             .border(width = 2.dp, color = borderColor, shape = CircleShape)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick).semantics {
+                stateDescription = when (status) {
+                    SkillStatus.LOCKED -> "Prerequisites pending; tap for details"
+                    SkillStatus.AVAILABLE -> "Ready to practice; tap for details"
+                    SkillStatus.MASTERED -> "Practice target completed; tap to train again"
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Icon(

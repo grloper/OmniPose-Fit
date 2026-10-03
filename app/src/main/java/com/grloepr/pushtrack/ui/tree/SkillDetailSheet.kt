@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -82,15 +83,17 @@ fun SkillDetailSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = SurfaceRaised,
+        contentColor = TextBright,
         dragHandle = { BottomSheetDefaults.DragHandle(color = OutlineSteel) }
     ) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .fillMaxHeight(0.9f)
                 .padding(horizontal = 22.dp)
                 .navigationBarsPadding()
                 .padding(bottom = 22.dp)
         ) {
+            Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             SheetHeader(node, status)
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -125,7 +128,9 @@ fun SkillDetailSheet(
             Spacer(modifier = Modifier.height(8.dp))
             PrerequisiteChips(node, masteredIds)
 
-            Spacer(modifier = Modifier.height(22.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
             CallToAction(node, status, onStartTraining, onSkipUnlock)
         }
     }
@@ -273,7 +278,7 @@ private fun PrereqChip(prereq: SkillNode, isMastered: Boolean) {
             modifier = Modifier.weight(1f)
         )
         Text(
-            text = if (isMastered) "MASTERED" else "REQUIRED",
+            text = if (isMastered) "COMPLETED" else "REQUIRED",
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp,
@@ -319,8 +324,14 @@ private fun CallToAction(
                 ) {
                     Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Master the requirements to unlock", modifier = Modifier.padding(vertical = 6.dp))
+                    Text("Suggested practice order", modifier = Modifier.padding(vertical = 6.dp))
                 }
+                Text(
+                    "Camera tracking cannot verify every prerequisite. Opening practice does not record completion or award XP.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
                 Spacer(modifier = Modifier.height(10.dp))
                 OutlinedButton(
                     onClick = onSkipUnlock,
@@ -331,7 +342,7 @@ private fun CallToAction(
                     Icon(Icons.Rounded.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Skip requirements & unlock",
+                        text = "Open practice anyway",
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(vertical = 6.dp)
                     )

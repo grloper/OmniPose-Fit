@@ -23,3 +23,6 @@ local.properties
 META-INF/
 
 .kotlin/
+/evidence/
+__pycache__/
+*.pyc

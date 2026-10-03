@@ -31,6 +31,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cameraswitch
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Videocam
@@ -40,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -59,9 +63,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.grloepr.pushtrack.analysis.ImageAnalyzer
 import com.grloepr.pushtrack.analysis.PoseDetectionResult
-import com.grloepr.pushtrack.anatomy.AnatomyCanvas
-import com.grloepr.pushtrack.anatomy.MuscleGroup
-import com.grloepr.pushtrack.audio.TempoTickPlayer
+import com.grloepr.pushtrack.audio.CompletionCue
+import com.grloepr.pushtrack.audio.SessionOutcomeController
+import com.grloepr.pushtrack.audio.SuccessSoundPlayer
 import com.grloepr.pushtrack.camera.bindCameraWithAnalysis
 import com.grloepr.pushtrack.camera.rememberCameraProvider
 import com.grloepr.pushtrack.engine.AlignmentStatus
@@ -73,12 +77,11 @@ import com.grloepr.pushtrack.engine.ExerciseSchema
 import com.grloepr.pushtrack.engine.PoseSnapshot
 import com.grloepr.pushtrack.pose.PoseDetectorClient
 import com.grloepr.pushtrack.progression.SkillNode
-import com.grloepr.pushtrack.tts.TextToSpeechManager
 import com.grloepr.pushtrack.ui.components.CameraAngleBanner
 import com.grloepr.pushtrack.ui.components.GlassPanel
 import com.grloepr.pushtrack.ui.components.MasteryCelebration
 import com.grloepr.pushtrack.ui.components.OptimalEdgeGlow
-import com.grloepr.pushtrack.ui.components.RepCounterDial
+import com.grloepr.pushtrack.ui.components.SessionCounter
 import com.grloepr.pushtrack.ui.components.StateMachineRibbon
 import com.grloepr.pushtrack.ui.components.TempoPulseIndicator
 import com.grloepr.pushtrack.ui.overlay.ScannerViewfinder
@@ -107,36 +110,59 @@ fun TrainingScreen(
     val cameraProvider = rememberCameraProvider()
 
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_FRONT_CAMERA) }
-    var soundOn by remember { mutableStateOf(true) }
+    val soundPreferences = remember(context) { context.applicationContext.getSharedPreferences("training_feedback", 0) }
+    var soundOn by remember { mutableStateOf(soundPreferences.getBoolean("sound_enabled", true)) }
+    var paused by remember { mutableStateOf(false) }
+    var sessionPreviouslyOpened by rememberSaveable(node.id) { mutableStateOf(false) }
+    val recoveredSession = remember { sessionPreviouslyOpened }
+    LaunchedEffect(Unit) { sessionPreviouslyOpened = true }
+    var sessionActive by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
     var cameraError by remember { mutableStateOf(false) }
     val previewView = remember(context) {
         PreviewView(context).apply { scaleType = PreviewView.ScaleType.FIT_CENTER }
     }
 
-    val ttsManager = remember { TextToSpeechManager(context) }
-    val tickPlayer = remember { TempoTickPlayer() }
+    val successPlayer = remember { SuccessSoundPlayer(context.applicationContext) }
     val poseDetectorClient = remember { PoseDetectorClient().apply { initialize() } }
     val imageAnalyzer = remember { ImageAnalyzer(poseDetectorClient) }
 
     var poseResult by remember { mutableStateOf<PoseDetectionResult?>(null) }
     var frame by remember { mutableStateOf(EngineFrame.idle()) }
-    val engine = remember(schema) {
-        DynamicExerciseEngine(schema) { emitted -> frame = emitted }
+    var celebrationVisible by remember { mutableStateOf(false) }
+    var newlyUnlocked by remember { mutableStateOf(false) }
+    var showPartialHint by remember { mutableStateOf(false) }
+    var completionPulse by remember { mutableStateOf(0) }
+    val repFlash = remember { Animatable(0f) }
+    val feedback = remember(schema, node) { SessionOutcomeController(node.masteryReps, schema.isHold, node.id == schema.id, alreadyMastered) }
+    val engine = remember(schema, node) {
+        DynamicExerciseEngine(schema) { emitted ->
+            frame = emitted
+            val outcome = feedback.accept(emitted, sessionActive && !paused, soundOn)
+            val event = outcome?.feedback
+            if (event != null) {
+                completionPulse += 1
+                if (event.audible) {
+                    successPlayer.play(event.cue)
+                }
+                if (event.cue == CompletionCue.TARGET) {
+                    newlyUnlocked = requireNotNull(outcome).awardProgress
+                    if (newlyUnlocked) onMastered()
+                    celebrationVisible = true
+                }
+            }
+        }
     }
 
-    var celebrationVisible by remember { mutableStateOf(false) }
-    var masteryFired by remember { mutableStateOf(alreadyMastered) }
-    var showPartialHint by remember { mutableStateOf(false) }
-    val repFlash = remember { Animatable(0f) }
 
-    val targetMuscles = remember(schema) { MuscleGroup.fromSchemaNames(schema.targetMuscles) }
+    // Keep the preview bound while avoiding detector work outside active training.
+    SideEffect { imageAnalyzer.setEnabled(sessionActive && !paused && !celebrationVisible) }
 
     // Pose stream → engine
     LaunchedEffect(imageAnalyzer, engine) {
         engine.reset()
         imageAnalyzer.poseResults.collect { result ->
             if (!imageAnalyzer.isCurrent(result)) return@collect
-            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return@collect
+            if (!sessionActive || paused || celebrationVisible) return@collect
             poseResult = result
             engine.onPose(PoseSnapshot.fromMlKit(result.pose), result.timestampMs)
         }
@@ -144,7 +170,11 @@ fun TrainingScreen(
 
     DisposableEffect(lifecycleOwner, engine) {
         val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) sessionActive = true
             if (event == Lifecycle.Event.ON_PAUSE) {
+                sessionActive = false
+                imageAnalyzer.setEnabled(false)
+                successPlayer.stop()
                 imageAnalyzer.invalidate()
                 engine.interrupt(SystemClock.elapsedRealtime())
                 poseResult = null
@@ -171,26 +201,10 @@ fun TrainingScreen(
         }
     }
 
-    // Voice rep announcements + rep flash on the overlay
-    LaunchedEffect(frame.repCount) {
-        if (frame.repCount > 0) {
-            if (schema.isHold) {
-                ttsManager.speak("Hold complete!")
-            } else {
-                ttsManager.announceRepCount(frame.repCount)
-            }
+    LaunchedEffect(completionPulse) {
+        if (completionPulse > 0 && sessionActive && !paused) {
             repFlash.snapTo(1f)
             repFlash.animateTo(0f, animationSpec = tween(650))
-        }
-    }
-
-    // Mastery goal
-    LaunchedEffect(frame.repCount) {
-        if (node.id == schema.id && !masteryFired && frame.repCount >= node.masteryReps) {
-            masteryFired = true
-            onMastered()
-            ttsManager.speak("Session target reached!")
-            celebrationVisible = true
         }
     }
 
@@ -204,19 +218,18 @@ fun TrainingScreen(
     }
 
     // Audio tempo pacer — a soft pip on every beat while tracking is live.
-    LaunchedEffect(soundOn) {
-        if (!soundOn) return@LaunchedEffect
+    LaunchedEffect(soundOn, sessionActive, paused, celebrationVisible) {
+        if (!soundOn || !sessionActive || paused || celebrationVisible) return@LaunchedEffect
         while (isActive) {
             delay(schema.tempoPulseIntervalMs)
-            if (frame.phase != EnginePhase.SEARCHING) tickPlayer.tick()
+            if (frame.phase != EnginePhase.SEARCHING) successPlayer.play(CompletionCue.TEMPO)
         }
     }
 
     DisposableEffect(Unit) {
         onDispose {
             poseDetectorClient.close()
-            ttsManager.shutdown()
-            tickPlayer.release()
+            successPlayer.release()
         }
     }
 
@@ -228,6 +241,7 @@ fun TrainingScreen(
             factory = { previewView },
             modifier = Modifier.fillMaxSize().testTag("camera-preview").semantics {
                 stateDescription = if (poseResult != null) "Pose analysis active" else "Waiting for pose analysis"
+                analysisTimestampMs = poseResult?.timestampMs ?: -1L
             }
         )
 
@@ -245,7 +259,7 @@ fun TrainingScreen(
 
         // Scanner while the engine hunts for an athlete
         AnimatedVisibility(
-            visible = frame.phase == EnginePhase.SEARCHING,
+            visible = !paused && frame.phase == EnginePhase.SEARCHING,
             enter = fadeIn(tween(400)),
             exit = fadeOut(tween(400))
         ) {
@@ -264,6 +278,10 @@ fun TrainingScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             ExerciseChip(node = node, plane = schema.optimalPlane)
+            if (recoveredSession) {
+                Text("New session after restart - previous session counts were reset.",
+                    style = MaterialTheme.typography.bodySmall, color = SignalAmber, modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
+            }
             Text(
                 text = if (node.id == schema.id) {
                     "Estimates joint motion; does not certify technique or mastery"
@@ -275,8 +293,12 @@ fun TrainingScreen(
                 modifier = Modifier.background(Color.Black.copy(alpha = 0.7f)).padding(8.dp)
             )
             Spacer(modifier = Modifier.height(10.dp))
-            if (cameraError) {
-                Text("Camera unavailable. Try switching camera or end this session.", color = SignalAmber)
+            if (paused) {
+                Text("Paused — completed counts are kept. Resume from the start posture.", color = Color.White, modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
+            } else if (cameraProvider == null) {
+                Text("Starting camera…", color = Color.White, modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
+            } else if (cameraError) {
+                Text("Camera unavailable. Try switching camera or end this session.", color = SignalAmber, modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
             } else {
                 CameraAngleBanner(alignment = frame.alignment)
             }
@@ -284,7 +306,7 @@ fun TrainingScreen(
                 text = "Completed: ${frame.repCount}",
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.testTag("rep-status")
+                modifier = Modifier.background(Color.Black.copy(alpha = 0.82f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp).testTag("rep-status")
             )
         }
 
@@ -327,44 +349,17 @@ fun TrainingScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 14.dp)
                 ) {
+                    SessionCounter(frame, node.masteryReps, schema.holdTargetMs)
+
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        StateMachineRibbon(phase = frame.phase, isHold = schema.isHold)
+                        Spacer(modifier = Modifier.height(12.dp))
                         TempoPulseIndicator(
                             intervalMs = schema.tempoPulseIntervalMs,
-                            active = frame.phase != EnginePhase.SEARCHING,
+                            active = sessionActive && !paused && frame.phase != EnginePhase.SEARCHING,
                             avgRepDurationMs = frame.avgRepDurationMs
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        AnatomyCanvas(
-                            highlighted = targetMuscles,
-                            showBackView = false,
-                            highlightIntensity = when (frame.phase) {
-                                EnginePhase.SEARCHING -> 0.25f
-                                EnginePhase.READY -> 0.55f
-                                else -> 1f
-                            },
-                            modifier = Modifier.size(width = 64.dp, height = 96.dp)
-                        )
                     }
-
-                    val holdTargetMs = schema.holdTargetMs
-                    if (holdTargetMs != null) {
-                        // For isometric skills the dial counts hold seconds, and
-                        // the ring fills as the hold approaches its target.
-                        RepCounterDial(
-                            repCount = (frame.holdMs / 1000L).toInt(),
-                            goalReps = (holdTargetMs / 1000L).toInt(),
-                            progress = frame.progress,
-                            unitLabel = "sec hold"
-                        )
-                    } else {
-                        RepCounterDial(
-                            repCount = frame.repCount,
-                            goalReps = node.masteryReps,
-                            progress = frame.progress
-                        )
-                    }
-
-                    StateMachineRibbon(phase = frame.phase, isHold = schema.isHold)
                 }
             }
 
@@ -391,13 +386,38 @@ fun TrainingScreen(
                 )
                 ControlButton(
                     icon = if (soundOn) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff,
-                    contentDescription = "Toggle tempo sound",
-                    onClick = { soundOn = !soundOn }
+                    contentDescription = if (soundOn) "Mute training audio" else "Enable training audio",
+                    onClick = {
+                        soundOn = !soundOn
+                        soundPreferences.edit().putBoolean("sound_enabled", soundOn).apply()
+                        if (!soundOn) { successPlayer.stop() }
+                    }
+                )
+                ControlButton(
+                    icon = if (paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                    contentDescription = if (paused) "Resume tracking" else "Pause tracking",
+                    onClick = {
+                        paused = !paused
+                        imageAnalyzer.setEnabled(sessionActive && !paused && !celebrationVisible)
+                        imageAnalyzer.invalidate()
+                        engine.interrupt(SystemClock.elapsedRealtime())
+                        poseResult = null
+                        successPlayer.stop()
+                    }
                 )
                 ControlButton(
                     icon = Icons.Rounded.Refresh,
                     contentDescription = "Reset reps",
-                    onClick = { engine.reset() }
+                    onClick = {
+                        imageAnalyzer.invalidate()
+                        feedback.reset()
+                        engine.reset()
+                        poseResult = null
+                        showPartialHint = false
+                        celebrationVisible = false
+                        completionPulse = 0
+                        successPlayer.stop()
+                    }
                 )
                 ControlButton(
                     icon = Icons.Rounded.Close,
@@ -411,8 +431,14 @@ fun TrainingScreen(
         MasteryCelebration(
             visible = celebrationVisible,
             skillTitle = node.title,
-            xpReward = node.xpReward,
-            onContinue = onExit
+            xpReward = if (newlyUnlocked) node.xpReward else 0,
+            onContinue = onExit,
+            onKeepPracticing = {
+                imageAnalyzer.invalidate()
+                engine.interrupt(SystemClock.elapsedRealtime())
+                poseResult = null
+                celebrationVisible = false
+            }
         )
     }
 }

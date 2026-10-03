@@ -1,5 +1,11 @@
 name: Validate Android
 on:
+  workflow_dispatch:
+    inputs:
+      soak_minutes:
+        description: Synthetic empty-camera endurance minutes (0 through 30)
+        default: '0'
+        required: false
   pull_request:
   push:
     branches: [master]
@@ -8,9 +14,13 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Install pinned workflow validators
+        run: bash scripts/install_validation_tools.sh
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -36,16 +46,16 @@ jobs:
         run: sdkmanager "platforms;android-36" "build-tools;34.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
       - name: Test, lint and build development APKs
         run: |
-          python3 scripts/test_ci_android_smoke.py
-          chmod +x gradlew
-          ./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest bundleRelease --no-daemon --max-workers=2 -Pkotlin.compiler.execution.strategy=in-process
+          python3 scripts/prepush_gate.py --app omni
       - name: Enable runner virtualization
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Synthetic emulator launch smoke
-        timeout-minutes: 15
+        timeout-minutes: 50
+        env:
+          SOAK_MINUTES: ${{ inputs.soak_minutes || '0' }}
         run: bash scripts/ci_android_smoke.sh
       - uses: actions/upload-artifact@v4
         if: always()

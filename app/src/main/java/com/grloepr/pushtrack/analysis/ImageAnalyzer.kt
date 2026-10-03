@@ -10,6 +10,7 @@ import com.grloepr.pushtrack.pose.PoseDetectorClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -36,11 +37,12 @@ class ImageAnalyzer(
 ) : ImageAnalysis.Analyzer {
     
     private val analysisScope = CoroutineScope(Dispatchers.Default)
-    @Volatile private var generation = 0L
+    private val gate = AnalysisGate()
 
     /** In-flight results from the old camera must not reach the new session. */
-    fun invalidate() { generation += 1L }
-    fun isCurrent(result: PoseDetectionResult): Boolean = result.generation == generation
+    fun invalidate() = gate.invalidate()
+    fun setEnabled(enabled: Boolean) = gate.setEnabled(enabled)
+    fun isCurrent(result: PoseDetectionResult): Boolean = gate.isCurrent(result.generation)
 
     private var lastAnalysisTime = 0L
     private val targetAnalysisInterval = 1000L / 15L // ~15 FPS (66ms between frames)
@@ -51,6 +53,8 @@ class ImageAnalyzer(
     
     @SuppressLint("UnsafeOptInUsageError")
     override fun analyze(imageProxy: ImageProxy) {
+        val frameGeneration = gate.admit()
+        if (frameGeneration == null) { imageProxy.close(); return }
         val currentTime = SystemClock.elapsedRealtime()
         
         // Throttle analysis to target FPS and skip if already processing
@@ -59,7 +63,11 @@ class ImageAnalyzer(
             return
         }
         
-        val frameGeneration = generation
+        if (!gate.isCurrent(frameGeneration)) {
+            isProcessing.set(false)
+            imageProxy.close()
+            return
+        }
         lastAnalysisTime = currentTime
         
         val mediaImage = imageProxy.image
@@ -91,7 +99,8 @@ class ImageAnalyzer(
                 onSuccess = { pose ->
                     // Emit pose results with image dimensions to collectors on background thread
                     analysisScope.launch {
-                        if (frameGeneration == generation) _poseResults.tryEmit(
+                        withContext(Dispatchers.Main.immediate) {
+                            if (gate.isCurrent(frameGeneration)) _poseResults.tryEmit(
                             PoseDetectionResult(
                                 pose = pose,
                                 imageWidth = imageWidth,
@@ -101,6 +110,7 @@ class ImageAnalyzer(
                                 timestampMs = currentTime
                             )
                         )
+                        }
                         isProcessing.set(false)
                         imageProxy.close()
                     }

@@ -13,12 +13,14 @@ class TrainingJourneyTest {
 
     @Before fun grantSyntheticCamera() {
         InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("pm grant com.grloepr.pushtrack android.permission.CAMERA").close()
+            .executeShellCommand("pm grant ${InstrumentationRegistry.getInstrumentation().targetContext.packageName} android.permission.CAMERA").close()
     }
 
     @Test fun skillTrainingResetSwitchAndExit() {
         compose.onNodeWithContentDescription("Wall Push-Up").performClick()
-        compose.onNodeWithText("Start motion tracking").performScrollTo().performClick()
+        compose.waitForIdle()
+        captureRuntimeEvidence("exercise-detail")
+        compose.onNodeWithText("Start motion tracking").performClick()
         compose.waitUntil(15000) {
             compose.onAllNodesWithTag("rep-status").fetchSemanticsNodes().isNotEmpty()
         }
@@ -34,6 +36,17 @@ class TrainingJourneyTest {
         compose.onNodeWithText("Camera unavailable. Try switching camera or end this session.")
             .assertDoesNotExist()
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
+        compose.waitForIdle()
+        captureRuntimeEvidence("training-controls-empty-synthetic-camera")
+        compose.onNodeWithContentDescription("Pause tracking").performClick()
+        compose.onNodeWithText("Paused — completed counts are kept. Resume from the start posture.").assertExists()
+        compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
+        compose.waitForIdle()
+        captureRuntimeEvidence("training-paused")
+        compose.onNodeWithContentDescription("Resume tracking").performClick()
+        val mute = compose.onAllNodesWithContentDescription("Mute training audio").fetchSemanticsNodes()
+        if (mute.isNotEmpty()) compose.onNodeWithContentDescription("Mute training audio").performClick()
+        compose.onNodeWithContentDescription("Enable training audio").assertExists()
         compose.onNodeWithContentDescription("Reset reps").performClick()
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
         compose.onNodeWithContentDescription("Switch camera").performClick()
@@ -50,5 +63,11 @@ class TrainingJourneyTest {
         compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
         compose.onNodeWithContentDescription("End session").performClick()
         compose.onNodeWithContentDescription("Wall Push-Up").assertExists()
+        compose.onNodeWithContentDescription("Wall Push-Up").performClick()
+        compose.onNodeWithText("Start motion tracking").performClick()
+        compose.waitUntil(15000) { compose.onAllNodesWithTag("rep-status").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Enable training audio").assertExists()
+        compose.onNodeWithTag("rep-status").assertTextEquals("Completed: 0")
+        compose.onNodeWithContentDescription("End session").performClick()
     }
 }

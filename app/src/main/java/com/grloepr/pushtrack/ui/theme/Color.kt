@@ -35,4 +35,4 @@ val CriticalRed = Color(0xFFFF4D6A)
 // Content
 val TextBright = Color(0xFFF2F6FF)
 val TextMuted = Color(0xFF97A6C8)
-val TextFaint = Color(0xFF5B6A8C)
+val TextFaint = Color(0xFF8191B2)
