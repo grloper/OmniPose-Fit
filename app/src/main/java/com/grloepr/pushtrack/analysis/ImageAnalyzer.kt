@@ -10,6 +10,7 @@ import com.grloepr.pushtrack.pose.PoseDetectorClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -98,7 +99,8 @@ class ImageAnalyzer(
                 onSuccess = { pose ->
                     // Emit pose results with image dimensions to collectors on background thread
                     analysisScope.launch {
-                        if (gate.isCurrent(frameGeneration)) _poseResults.tryEmit(
+                        withContext(Dispatchers.Main.immediate) {
+                            if (gate.isCurrent(frameGeneration)) _poseResults.tryEmit(
                             PoseDetectionResult(
                                 pose = pose,
                                 imageWidth = imageWidth,
@@ -108,6 +110,7 @@ class ImageAnalyzer(
                                 timestampMs = currentTime
                             )
                         )
+                        }
                         isProcessing.set(false)
                         imageProxy.close()
                     }
