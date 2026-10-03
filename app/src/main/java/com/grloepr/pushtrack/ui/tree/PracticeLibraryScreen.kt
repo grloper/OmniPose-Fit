@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.grloepr.pushtrack.engine.ExerciseLibrary
 import com.grloepr.pushtrack.practice.PracticeLibrary
@@ -37,7 +38,7 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
         "My plan" -> plan.toSet()
         else -> null
     }).filter { motionFilter == "Any motion" || (it.id in holds) == (motionFilter == "Holds") }.let { matches -> if (filter == "My plan") matches.sortedBy { plan.indexOf(it.id) } else matches }
-    LazyColumn(modifier.navigationBarsPadding(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(modifier.navigationBarsPadding().testTag("exercise-library-list"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Column {
         OutlinedTextField(query, { query = it.take(200) }, label = { Text("Search exercises") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
@@ -82,8 +83,8 @@ fun PracticeLibraryScreen(onInspect: (SkillNode) -> Unit, modifier: Modifier = M
                             }) { Text(if(node.id in plan) "Remove from plan" else "Add to plan") }
                         }
                         Column {
-                            TextButton({ onInspect(node) }) { Text("Preview & tracking") }
-                            Button({ manualId = node.id }) { Text("Manual practice") }
+                            TextButton({ onInspect(node) }, modifier = Modifier.testTag("exercise-detail-${node.id}")) { Text("Preview & tracking") }
+                            Button({ manualId = node.id }, modifier = Modifier.testTag("manual-practice-${node.id}")) { Text("Manual practice") }
                         }
                     }
                 }

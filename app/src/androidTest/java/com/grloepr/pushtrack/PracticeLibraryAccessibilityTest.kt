@@ -1,6 +1,6 @@
 package com.grloepr.pushtrack
 
-import androidx.compose.material3.MaterialTheme
+import com.grloepr.pushtrack.ui.theme.PushTrackTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -21,7 +21,7 @@ class PracticeLibraryAccessibilityTest {
         compose.setContent {
             val density = LocalDensity.current.density
             CompositionLocalProvider(LocalDensity provides Density(density, 2f)) {
-                MaterialTheme { PracticeLibraryScreen(onInspect = {}) }
+                PushTrackTheme { PracticeLibraryScreen(onInspect = {}) }
             }
         }
         capturePracticeEvidence("library-font2")
